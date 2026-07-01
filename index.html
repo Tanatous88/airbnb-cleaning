@@ -34,15 +34,15 @@ header p  { font-size: 13px; opacity: 0.88; margin-top: 4px; }
 </head>
 <body>
 <header>
-  <h1>&#127968; Airbnb Cleaning Sign-Ups</h1>
+  <h1>🏡 Airbnb Cleaning Sign-Ups</h1>
   <p id="subtitle">Coming up in the next week</p>
 </header>
 <div class="content" id="content"></div>
 <!-- EVENTS_DATA_START -->
 <script>
 window.CLEANING_DATA = {
-  generatedAt: "Not yet updated - check back tonight",
-  events: []
+  generatedAt: "Tue Jun 30 9:53pm PT",
+  events: [{"unit":"Garage Studio","guest":"Brenda Vander Pol","party":"2a 2p","cleaner":"","repeat":false,"dayNum":2,"dayName":"Thu"},{"unit":"Fun Music","guest":"Perla Delgado","party":"3a","cleaner":"","repeat":false,"dayNum":5,"dayName":"Sun"},{"unit":"Midnight Nook","guest":"Harrison Moir","party":"1a","cleaner":"","repeat":false,"dayNum":5,"dayName":"Sun"},{"unit":"Cosmo","guest":"Zac Brendel","party":"2a","cleaner":"","repeat":false,"dayNum":7,"dayName":"Tue"}]
 };
 </script>
 <!-- EVENTS_DATA_END -->
@@ -57,17 +57,17 @@ function render() {
   const content = document.getElementById('content');
   let html = '';
   if (!events.length) {
-    html = '<div class="empty">No check-ins yet. Data updates nightly after 6pm!</div>';
+    html = '<div class="empty">No check-ins this week. Check back soon!</div>';
   } else {
-    if (unassigned.length) { html += '<div class="section-head">Coming up - needs a cleaner</div>'; html += unassigned.map(card).join(''); }
-    if (assigned.length)   { html += '<div class="section-head">Already assigned</div>'; html += assigned.map(e => card(e, true)).join(''); }
+    if (unassigned.length) { html += '<div class="section-head">📋 Coming up — needs a cleaner</div>'; html += unassigned.map(card).join(''); }
+    if (assigned.length)   { html += '<div class="section-head">✅ Already assigned</div>'; html += assigned.map(e => card(e, true)).join(''); }
   }
   html += '<p class="updated">Last updated: ' + generatedAt + '</p>';
   content.innerHTML = html;
 }
 function card(e, isAssigned) {
   const color = unitColor(e.unit);
-  return '<div class="card' + (isAssigned ? ' assigned' : '') + '" style="border-left-color:' + color + '"><div class="card-top"><div class="date-badge"><div class="dn">' + e.dayNum + '</div><div class="dd">' + e.dayName + '</div></div><div class="card-info"><div class="unit-name">' + e.unit + (e.repeat ? ' <span class="repeat-badge">Repeat</span>' : '') + '</div><div class="guest-name">' + e.guest + '</div>' + (e.party ? '<span class="party-pill">' + e.party + '</span>' : '') + '</div></div>' + (isAssigned ? '<div class="assigned-tag"><span>Assigned to ' + e.cleaner + '</span></div>' : '<a class="signup-btn" href="' + FORM_URL + '" target="_blank" style="background:' + color + '">Sign Up to Clean This Unit</a>') + '</div>';
+  return '<div class="card' + (isAssigned ? ' assigned' : '') + '" style="border-left-color:' + color + '"><div class="card-top"><div class="date-badge"><div class="dn">' + e.dayNum + '</div><div class="dd">' + e.dayName + '</div></div><div class="card-info"><div class="unit-name">' + e.unit + (e.repeat ? ' <span class="repeat-badge">⭐ Repeat</span>' : '') + '</div><div class="guest-name">' + e.guest + '</div>' + (e.party ? '<span class="party-pill">' + e.party + '</span>' : '') + '</div></div>' + (isAssigned ? '<div class="assigned-tag"><span>✅</span> Assigned to ' + e.cleaner + '</div>' : '<a class="signup-btn" href="' + FORM_URL + '" target="_blank" style="background:' + color + '">Sign Up to Clean This Unit</a>') + '</div>';
 }
 render();
 </script>
