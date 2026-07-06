@@ -41,7 +41,7 @@ header p  { font-size: 13px; opacity: 0.88; margin-top: 4px; }
 <!-- EVENTS_DATA_START -->
 <script>
 window.CLEANING_DATA = {
-  generatedAt: "Mon Jul 6 9:50am PT",
+  generatedAt: "Mon Jul 6 10:40am PT",
   events: [{"unit":"Cosmo","guest":"Zac Brendel","party":"2a","cleaner":"","repeat":false,"dayNum":7,"dayName":"Tue","dateISO":"2026-07-07"},{"unit":"Garage Studio","guest":"Suanna Smith-Sanchez","party":"1a","cleaner":"","repeat":true,"dayNum":8,"dayName":"Wed","dateISO":"2026-07-08"},{"unit":"Mini Cows","guest":"Elizabeth Nonamaker","party":"3a 2p","cleaner":"","repeat":true,"dayNum":8,"dayName":"Wed","dateISO":"2026-07-08"},{"unit":"Mini Cows","guest":"Allison Brown","party":"2a","cleaner":"","repeat":false,"dayNum":9,"dayName":"Thu","dateISO":"2026-07-09"},{"unit":"Garage Studio","guest":"Travis Robinette","party":"2a 1p","cleaner":"","repeat":false,"dayNum":10,"dayName":"Fri","dateISO":"2026-07-10"},{"unit":"Mini Cows","guest":"Katie Kraeling","party":"2a 2p","cleaner":"","repeat":false,"dayNum":10,"dayName":"Fri","dateISO":"2026-07-10"},{"unit":"Garage Studio","guest":"Joshua Wittler","party":"2a","cleaner":"","repeat":false,"dayNum":12,"dayName":"Sun","dateISO":"2026-07-12"}]
 };
 </script>
@@ -62,8 +62,8 @@ function render() {
   if (!events.length) {
     html = '<div class="empty">No check-ins this week. Check back soon!</div>';
   } else {
-    if (unassigned.length) { html += '<div class="section-head">&#128203; Coming up &mdash; needs a cleaner</div>'; html += unassigned.map(card).join(''); }
-    if (assigned.length)   { html += '<div class="section-head">&#9989; Already assigned</div>'; html += assigned.map(e => card(e, true)).join(''); }
+    if (unassigned.length) { html += '<div class="section-head">&#128203; Coming up &mdash; needs a cleaner</div>'; html += unassigned.map(function(e) { return card(e, false); }).join(''); }
+    if (assigned.length)   { html += '<div class="section-head">&#9989; Already assigned</div>'; html += assigned.map(function(e) { return card(e, true); }).join(''); }
   }
   html += '<p class="updated">Last updated: ' + generatedAt + '</p>';
   content.innerHTML = html;
