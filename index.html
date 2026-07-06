@@ -7,176 +7,71 @@
 <style>
 :root { color-scheme: light; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #f5f7fa;
-  min-height: 100vh;
-}
-
-header {
-  background: #FF5A5F;
-  color: white;
-  padding: 20px 20px 16px;
-  text-align: center;
-}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; min-height: 100vh; }
+header { background: #FF5A5F; color: white; padding: 20px 20px 16px; text-align: center; }
 header h1 { font-size: 22px; font-weight: 700; }
 header p  { font-size: 13px; opacity: 0.88; margin-top: 4px; }
-
-.content {
-  max-width: 520px;
-  margin: 0 auto;
-  padding: 16px 14px 32px;
-}
-
-.section-head {
-  font-size: 11px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 1px;
-  color: #888; margin: 18px 0 8px;
-}
+.content { max-width: 520px; margin: 0 auto; padding: 16px 14px 32px; }
+.section-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #888; margin: 18px 0 8px; }
 .section-head:first-child { margin-top: 6px; }
-
-.card {
-  background: white;
-  border-radius: 12px;
-  padding: 14px 16px;
-  margin-bottom: 10px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.09);
-  border-left: 5px solid #ccc;
-}
+.card { background: white; border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.09); border-left: 5px solid #ccc; }
 .card.assigned { opacity: 0.55; }
-
-.card-top {
-  display: flex; align-items: center;
-  gap: 12px; margin-bottom: 12px;
-}
-
-.date-badge {
-  background: #f0f4f8; border-radius: 10px;
-  padding: 6px 10px; text-align: center;
-  min-width: 50px; flex-shrink: 0;
-}
+.card-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.date-badge { background: #f0f4f8; border-radius: 10px; padding: 6px 10px; text-align: center; min-width: 50px; flex-shrink: 0; }
 .date-badge .dn { font-size: 24px; font-weight: 800; line-height: 1; color: #1a1a2e; }
 .date-badge .dd { font-size: 10px; font-weight: 600; text-transform: uppercase; color: #777; margin-top: 2px; }
-
 .card-info { flex: 1; min-width: 0; }
-.unit-name {
-  font-size: 17px; font-weight: 700; color: #111;
-  display: flex; align-items: center; flex-wrap: wrap; gap: 5px;
-}
-.repeat-badge {
-  background: #fff3e0; color: #e65100;
-  border-radius: 4px; padding: 1px 6px; font-size: 11px; font-weight: 600;
-}
+.unit-name { font-size: 17px; font-weight: 700; color: #111; display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.repeat-badge { background: #fff3e0; color: #e65100; border-radius: 4px; padding: 1px 6px; font-size: 11px; font-weight: 600; }
 .guest-name { font-size: 13px; color: #555; margin-top: 3px; }
-.party-pill {
-  display: inline-block; background: #f0f4f8;
-  border-radius: 20px; padding: 2px 9px; font-size: 12px; color: #555; margin-top: 5px;
-}
-
-.signup-btn {
-  display: block; width: 100%; padding: 12px;
-  border: none; border-radius: 8px;
-  font-size: 15px; font-weight: 600; cursor: pointer;
-  text-align: center; text-decoration: none;
-  color: white; transition: opacity 0.15s;
-}
+.party-pill { display: inline-block; background: #f0f4f8; border-radius: 20px; padding: 2px 9px; font-size: 12px; color: #555; margin-top: 5px; }
+.signup-btn { display: block; width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; color: white; transition: opacity 0.15s; }
 .signup-btn:hover { opacity: 0.85; }
-
-.assigned-tag {
-  display: flex; align-items: center; gap: 7px;
-  background: #f0f4f8; border-radius: 8px;
-  padding: 10px 13px; font-size: 13px; color: #555; font-weight: 500;
-}
-
+.assigned-tag { display: flex; align-items: center; gap: 7px; background: #f0f4f8; border-radius: 8px; padding: 10px 13px; font-size: 13px; color: #555; font-weight: 500; }
 .empty { text-align: center; padding: 48px 20px; color: #888; font-size: 15px; }
-
-.updated {
-  text-align: center; font-size: 11px; color: #bbb;
-  padding-top: 14px;
-}
+.updated { text-align: center; font-size: 11px; color: #bbb; padding-top: 14px; }
 </style>
 </head>
 <body>
-
 <header>
-  <h1>🏡 Airbnb Cleaning Sign-Ups</h1>
+  <h1>&#127968; Airbnb Cleaning Sign-Ups</h1>
   <p id="subtitle">Coming up in the next week</p>
 </header>
-
 <div class="content" id="content"></div>
-
 <!-- EVENTS_DATA_START -->
 <script>
 window.CLEANING_DATA = {
-  generatedAt: "Loading…",
-  events: []
+  generatedAt: "Mon Jul 6 9:50am PT",
+  events: [{"unit":"Cosmo","guest":"Zac Brendel","party":"2a","cleaner":"","repeat":false,"dayNum":7,"dayName":"Tue","dateISO":"2026-07-07"},{"unit":"Garage Studio","guest":"Suanna Smith-Sanchez","party":"1a","cleaner":"","repeat":true,"dayNum":8,"dayName":"Wed","dateISO":"2026-07-08"},{"unit":"Mini Cows","guest":"Elizabeth Nonamaker","party":"3a 2p","cleaner":"","repeat":true,"dayNum":8,"dayName":"Wed","dateISO":"2026-07-08"},{"unit":"Mini Cows","guest":"Allison Brown","party":"2a","cleaner":"","repeat":false,"dayNum":9,"dayName":"Thu","dateISO":"2026-07-09"},{"unit":"Garage Studio","guest":"Travis Robinette","party":"2a 1p","cleaner":"","repeat":false,"dayNum":10,"dayName":"Fri","dateISO":"2026-07-10"},{"unit":"Mini Cows","guest":"Katie Kraeling","party":"2a 2p","cleaner":"","repeat":false,"dayNum":10,"dayName":"Fri","dateISO":"2026-07-10"},{"unit":"Garage Studio","guest":"Joshua Wittler","party":"2a","cleaner":"","repeat":false,"dayNum":12,"dayName":"Sun","dateISO":"2026-07-12"}]
 };
 </script>
 <!-- EVENTS_DATA_END -->
-
 <script>
-const FORM_URL = 'https://forms.gle/cFSNVsbrQZadQRX38';
-const UNIT_COLORS = {
-  'Fun Music':    '#FF5A5F',
-  'Garage Studio':'#00A699',
-  'Midnight Nook':'#8E24AA',
-  'Cosmo':        '#FB8C00',
-  'Mini Cows':    '#43A047',
-};
-
-function unitColor(name) { return UNIT_COLORS[name] || '#78909C'; }
-
+const FORM_BASE = 'https://docs.google.com/forms/d/e/1FAIpQLSeeZfcvmwMFtXNadTH8kw542rXb0KxQWID0tbShL5nuqZrmXg/viewform';
+const UNIT_ENTRY = 'entry.1764140552';
+const DATE_ENTRY = 'entry.493844947';
+function signupUrl(unit, dateISO) { return FORM_BASE + '?usp=pp_url&' + UNIT_ENTRY + '=' + encodeURIComponent(unit) + '&' + DATE_ENTRY + '=' + dateISO; }
+const UNIT_COLORS = { 'Fun Music': '#FF5A5F', 'Garage Studio': '#00A699', 'Midnight Nook': '#8E24AA', 'Cosmo': '#FB8C00', 'Mini Cows': '#43A047' };
+function unitColor(n) { return UNIT_COLORS[n] || '#78909C'; }
 function render() {
   const { generatedAt, events } = window.CLEANING_DATA;
   const unassigned = events.filter(e => !e.cleaner);
   const assigned   = events.filter(e =>  e.cleaner);
   const content = document.getElementById('content');
   let html = '';
-
   if (!events.length) {
-    html = '<div class="empty">🎉 No check-ins in the next 7 days!</div>';
+    html = '<div class="empty">No check-ins this week. Check back soon!</div>';
   } else {
-    if (unassigned.length) {
-      html += '<div class="section-head">📋 Coming up — needs a cleaner</div>';
-      html += unassigned.map(card).join('');
-    }
-    if (assigned.length) {
-      html += '<div class="section-head">✅ Already assigned</div>';
-      html += assigned.map(e => card(e, true)).join('');
-    }
+    if (unassigned.length) { html += '<div class="section-head">&#128203; Coming up &mdash; needs a cleaner</div>'; html += unassigned.map(card).join(''); }
+    if (assigned.length)   { html += '<div class="section-head">&#9989; Already assigned</div>'; html += assigned.map(e => card(e, true)).join(''); }
   }
-
-  html += `<p class="updated">Last updated: ${generatedAt}</p>`;
+  html += '<p class="updated">Last updated: ' + generatedAt + '</p>';
   content.innerHTML = html;
 }
-
 function card(e, isAssigned) {
   const color = unitColor(e.unit);
-  return `
-  <div class="card${isAssigned ? ' assigned' : ''}" style="border-left-color:${color}">
-    <div class="card-top">
-      <div class="date-badge">
-        <div class="dd">${e.dayName}</div>
-        <div class="dn">${e.dayNum}</div>
-        <div class="dd">${e.month}</div>
-      </div>
-      <div class="card-info">
-        <div class="unit-name">
-          ${e.unit}
-          ${e.repeat ? '<span class="repeat-badge">⭐ Repeat</span>' : ''}
-        </div>
-        <div class="guest-name">${e.guest}</div>
-        ${e.party ? `<span class="party-pill">${e.party}</span>` : ''}
-      </div>
-    </div>
-    ${isAssigned
-      ? `<div class="assigned-tag"><span>✅</span> Assigned to ${e.cleaner}</div>`
-      : `<a class="signup-btn" href="${FORM_URL}" target="_blank" style="background:${color}">Sign Up to Clean This Unit</a>`
-    }
-  </div>`;
+  return '<div class="card' + (isAssigned ? ' assigned' : '') + '" style="border-left-color:' + color + '"><div class="card-top"><div class="date-badge"><div class="dn">' + e.dayNum + '</div><div class="dd">' + e.dayName + '</div></div><div class="card-info"><div class="unit-name">' + e.unit + (e.repeat ? ' <span class="repeat-badge">&#11088; Repeat</span>' : '') + '</div><div class="guest-name">' + e.guest + '</div>' + (e.party ? '<span class="party-pill">' + e.party + '</span>' : '') + '</div></div>' + (isAssigned ? '<div class="assigned-tag"><span>&#9989;</span> Assigned to ' + e.cleaner + '</div>' : '<a class="signup-btn" href="' + signupUrl(e.unit, e.dateISO) + '" target="_blank" style="background:' + color + '">Sign Up to Clean This Unit</a>') + '</div>';
 }
-
 render();
 </script>
 </body>
