@@ -24,6 +24,7 @@ header p  { font-size: 13px; opacity: 0.88; margin-top: 4px; }
 .unit-name { font-size: 17px; font-weight: 700; color: #111; display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
 .repeat-badge { background: #fff3e0; color: #e65100; border-radius: 4px; padding: 1px 6px; font-size: 11px; font-weight: 600; }
 .guest-name { font-size: 13px; color: #555; margin-top: 3px; }
+.stay-range { font-size: 12px; color: #888; margin-top: 2px; }
 .party-pill { display: inline-block; background: #f0f4f8; border-radius: 20px; padding: 2px 9px; font-size: 12px; color: #555; margin-top: 5px; }
 .signup-btn { display: block; width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; color: white; transition: opacity 0.15s; }
 .signup-btn:hover { opacity: 0.85; }
@@ -41,8 +42,8 @@ header p  { font-size: 13px; opacity: 0.88; margin-top: 4px; }
 <!-- EVENTS_DATA_START -->
 <script>
 window.CLEANING_DATA = {
-  generatedAt: "Mon Jul 6 4:05pm PT",
-  events: [{"unit":"Cosmo","guest":"Zac Brendel","party":"2a","cleaner":"","repeat":false,"dayNum":7,"dayName":"Tue","dateISO":"2026-07-07"},{"unit":"Garage Studio","guest":"Suanna Smith-Sanchez","party":"1a","cleaner":"","repeat":true,"dayNum":8,"dayName":"Wed","dateISO":"2026-07-08"},{"unit":"Mini Cows","guest":"Elizabeth Nonamaker","party":"3a 2p","cleaner":"","repeat":true,"dayNum":8,"dayName":"Wed","dateISO":"2026-07-08"},{"unit":"Mini Cows","guest":"Katie Kraeling","party":"2a 2p","cleaner":"","repeat":false,"dayNum":10,"dayName":"Fri","dateISO":"2026-07-10"},{"unit":"Garage Studio","guest":"Joshua Wittler","party":"2a","cleaner":"","repeat":false,"dayNum":12,"dayName":"Sun","dateISO":"2026-07-12"}]
+  generatedAt: "Mon Jul 6 4:45pm PT",
+  events: [{"unit":"Cosmo","guest":"Zac Brendel","party":"2a","cleaner":"","repeat":false,"dayNum":7,"dayName":"Tue","dateISO":"2026-07-07","stayRange":"Jul 7 â€“ Jul 10","nights":3},{"unit":"Garage Studio","guest":"Suanna Smith-Sanchez","party":"1a","cleaner":"","repeat":true,"dayNum":8,"dayName":"Wed","dateISO":"2026-07-08","stayRange":"Jul 8 â€“ Jul 10","nights":2},{"unit":"Mini Cows","guest":"Elizabeth Nonamaker","party":"3a 2p","cleaner":"","repeat":true,"dayNum":8,"dayName":"Wed","dateISO":"2026-07-08","stayRange":"Jul 8 â€“ Jul 10","nights":2},{"unit":"Mini Cows","guest":"Katie Kraeling","party":"2a 2p","cleaner":"","repeat":false,"dayNum":10,"dayName":"Fri","dateISO":"2026-07-10","stayRange":"Jul 10 â€“ Jul 15","nights":5},{"unit":"Garage Studio","guest":"Joshua Wittler","party":"2a","cleaner":"","repeat":false,"dayNum":12,"dayName":"Sun","dateISO":"2026-07-12","stayRange":"Jul 12 â€“ Jul 14","nights":2}]
 };
 </script>
 <!-- EVENTS_DATA_END -->
@@ -70,7 +71,7 @@ function render() {
 }
 function card(e, isAssigned) {
   const color = unitColor(e.unit);
-  return '<div class="card' + (isAssigned ? ' assigned' : '') + '" style="border-left-color:' + color + '"><div class="card-top"><div class="date-badge"><div class="dn">' + e.dayNum + '</div><div class="dd">' + e.dayName + '</div></div><div class="card-info"><div class="unit-name">' + e.unit + (e.repeat ? ' <span class="repeat-badge">&#11088; Repeat</span>' : '') + '</div><div class="guest-name">' + e.guest + '</div>' + (e.party ? '<span class="party-pill">' + e.party + '</span>' : '') + '</div></div>' + (isAssigned ? '<div class="assigned-tag"><span>&#9989;</span> Assigned to ' + e.cleaner + '</div>' : '<a class="signup-btn" href="' + signupUrl(e.unit, e.dateISO) + '" target="_blank" style="background:' + color + '">Sign Up to Clean This Unit</a>') + '</div>';
+  return '<div class="card' + (isAssigned ? ' assigned' : '') + '" style="border-left-color:' + color + '"><div class="card-top"><div class="date-badge"><div class="dn">' + e.dayNum + '</div><div class="dd">' + e.dayName + '</div></div><div class="card-info"><div class="unit-name">' + e.unit + (e.repeat ? ' <span class="repeat-badge">&#11088; Repeat</span>' : '') + '</div><div class="guest-name">' + e.guest + '</div>' + (e.stayRange ? '<div class="stay-range">' + e.stayRange + (e.nights ? ' &middot; ' + e.nights + ' night' + (e.nights === 1 ? '' : 's') : '') + '</div>' : '') + (e.party ? '<span class="party-pill">' + e.party + '</span>' : '') + '</div></div>' + (isAssigned ? '<div class="assigned-tag"><span>&#9989;</span> Assigned to ' + e.cleaner + '</div>' : '<a class="signup-btn" href="' + signupUrl(e.unit, e.dateISO) + '" target="_blank" style="background:' + color + '">Sign Up to Clean This Unit</a>') + '</div>';
 }
 render();
 </script>
