@@ -36,14 +36,14 @@ header p  { font-size: 13px; opacity: 0.88; margin-top: 4px; }
 <body>
 <header>
   <h1>&#127968; Airbnb Cleaning Sign-Ups</h1>
-  <p id="subtitle">Coming up in the next week</p>
+  <p id="subtitle">Coming up in the next two weeks</p>
 </header>
 <div class="content" id="content"></div>
 <!-- EVENTS_DATA_START -->
 <script>
 window.CLEANING_DATA = {
-  generatedAt: "Mon Aug 3 7:14pm PT",
-  events: [{"unit":"Garage Studio","guest":"Armando Rodriguez","party":"3a","cleaner":"Michael","repeat":false,"dayNum":4,"dayName":"Tue","dateISO":"2026-08-04","stayRange":"Aug 4 - Aug 7","nights":3},{"unit":"Garage Studio","guest":"Tawni Allen","party":"1a","cleaner":"Michael","repeat":false,"dayNum":7,"dayName":"Fri","dateISO":"2026-08-07","stayRange":"Aug 7 - Aug 9","nights":2}]
+  generatedAt: "Mon Aug 3 7:18PM PT",
+  events: [{"unit":"Garage Studio","guest":"Armando Rodriguez","party":"3a","cleaner":"Michael","repeat":false,"dayNum":4,"dayName":"Tue","dateISO":"2026-08-04","stayRange":"Aug 4 - Aug 7","nights":3},{"unit":"Garage Studio","guest":"Tawni Allen","party":"1a","cleaner":"Michael","repeat":false,"dayNum":7,"dayName":"Fri","dateISO":"2026-08-07","stayRange":"Aug 7 - Aug 9","nights":2},{"unit":"Fun Music","guest":"Katrina Stroh","party":"2a","cleaner":"","repeat":false,"dayNum":13,"dayName":"Thu","dateISO":"2026-08-13","stayRange":"Aug 13 - Aug 16","nights":3},{"unit":"Garage Studio","guest":"Melissa Frank","party":"3a","cleaner":"","repeat":false,"dayNum":14,"dayName":"Fri","dateISO":"2026-08-14","stayRange":"Aug 14 - Aug 16","nights":2},{"unit":"Midnight Nook","guest":"Brian Still","party":"1a","cleaner":"","repeat":false,"dayNum":14,"dayName":"Fri","dateISO":"2026-08-14","stayRange":"Aug 14 - Aug 16","nights":2},{"unit":"Mini Cows","guest":"Jeremy Keenan","party":"2a 2k","cleaner":"","repeat":false,"dayNum":14,"dayName":"Fri","dateISO":"2026-08-14","stayRange":"Aug 14 - Aug 16","nights":2},{"unit":"Cosmo","guest":"Kelly Liske","party":"2a","cleaner":"","repeat":false,"dayNum":15,"dayName":"Sat","dateISO":"2026-08-15","stayRange":"Aug 15 - Aug 19","nights":4},{"unit":"Mini Cows","guest":"Robin Gauss","party":"3a 2p","cleaner":"","repeat":false,"dayNum":16,"dayName":"Sun","dateISO":"2026-08-16","stayRange":"Aug 16 - Aug 21","nights":5}]
 };
 </script>
 <!-- EVENTS_DATA_END -->
@@ -61,7 +61,7 @@ function render() {
   const content = document.getElementById('content');
   let html = '';
   if (!events.length) {
-    html = '<div class="empty">No check-ins this week. Check back soon!</div>';
+    html = '<div class="empty">No check-ins in the next two weeks. Check back soon!</div>';
   } else {
     if (unassigned.length) { html += '<div class="section-head">&#128203; Coming up &mdash; needs a cleaner</div>'; html += unassigned.map(function(e) { return card(e, false); }).join(''); }
     if (assigned.length)   { html += '<div class="section-head">&#9989; Already assigned</div>'; html += assigned.map(function(e) { return card(e, true); }).join(''); }
