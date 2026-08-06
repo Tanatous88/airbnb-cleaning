@@ -7,9 +7,9 @@ Below are the host's historical greeting / check-in messages for this unit, sepa
 
 {{greetings}}
 
-Your task: synthesize ONE base template that captures the recurring structure, tone, and core information blocks these messages share. Requirements:
+Your task: turn the host's own greeting into ONE reusable base template. This is an EDITING job, not a writing job — you are tweaking the host's actual message, not composing a new one. Requirements:
 
-1. Preserve the host's natural voice — friendly and personable, never corporate or gushing.
+1. Reuse the host's own sentences verbatim wherever possible. Do not rewrite, paraphrase, "improve", or re-order their wording. Where multiple greetings phrase the same thing differently, pick the phrasing the host used most recently or most often — still their words.
 2. Include every core information block that recurs across the greetings: entry/door code instructions, parking, WiFi, check-in time, house quirks, contact info, and checkout basics. If a block appears in only some messages but is clearly core info, include it.
 3. Replace all per-stay details with merge fields in double curly braces. Use these field names where applicable:
    {{guest_first_name}}, {{checkin_date}}, {{checkout_date}}, {{checkin_time}}, {{checkout_time}}, {{door_code}}, {{wifi_network}}, {{wifi_password}}
