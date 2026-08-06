@@ -570,7 +570,9 @@ def build_merge_values(conn, unit, stay) -> dict:
 
     def pretty_date(iso):
         try:
-            return date.fromisoformat(iso).strftime("%A, %B %-d")
+            d = date.fromisoformat(iso)
+            # %-d is not supported on Windows; format the day number manually
+            return f"{d.strftime('%A, %B')} {d.day}"
         except ValueError:
             return iso
 

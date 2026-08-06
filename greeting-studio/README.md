@@ -5,7 +5,23 @@ short-term-rental portfolio. FastAPI + SQLite backend, vanilla-JS single-page fr
 All text generation runs through the Anthropic API (Claude, model `claude-sonnet-4-6` by
 default) — no guest data leaves your machine except the text sent to Anthropic.
 
-## Setup (Mac)
+## Setup
+
+**Windows (PowerShell or Command Prompt):**
+
+```powershell
+cd greeting-studio
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+copy .env.example .env        # then edit .env and paste your ANTHROPIC_API_KEY
+python run.py                 # → http://127.0.0.1:8321
+```
+
+If `python` isn't found, install it from https://www.python.org/downloads/ (check
+"Add python.exe to PATH" in the installer), or use `py` instead of `python`.
+
+**Mac / Linux:**
 
 ```bash
 cd greeting-studio
