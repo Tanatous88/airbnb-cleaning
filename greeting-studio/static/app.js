@@ -206,8 +206,9 @@ async function openUnit(unitId) {
   </div>
 
   <div class="card">
-    <h3>Imported messages (${messages.length})</h3>
-    <p class="muted small">✅ greeting = will feed template synthesis. Click a message's buttons to reclassify.</p>
+    <h3 class="row" style="justify-content:space-between">Imported messages (${messages.length})
+      ${messages.length ? `<button class="secondary small" onclick="clearMessages(${unitId})">Delete ALL imported messages</button>` : ""}</h3>
+    <p class="muted small">✅ greeting = will feed template synthesis. Click a message's buttons to reclassify or delete.</p>
     <div id="msg-list">${messages.map(renderMsg).join("") || `<span class="muted small">Nothing imported yet.</span>`}</div>
   </div>`;
 }
@@ -222,6 +223,7 @@ function renderMsg(m) {
       <span style="margin-left:auto">
         <button class="ghost small" onclick="flipSender(${m.id}, '${m.sender === "host" ? "guest" : "host"}')">↔ ${m.sender === "host" ? "guest" : "host"}</button>
         <button class="ghost small" onclick="flipGreeting(${m.id}, ${m.is_greeting ? "false" : "true"})">${m.is_greeting ? "✕ not greeting" : "✓ mark greeting"}</button>
+        <button class="ghost small" onclick="deleteMessage(${m.id})">🗑</button>
       </span>
     </div>${esc(m.body)}</div>`;
 }
@@ -245,6 +247,18 @@ async function flipGreeting(id, isGreeting) {
   await api(`/api/messages/${id}`, { method: "PUT", body: { is_greeting: isGreeting } });
   const unitId = currentUnitIdFromDom(); if (unitId) openUnit(unitId);
 }
+async function deleteMessage(id) {
+  await api(`/api/messages/${id}`, { method: "DELETE" });
+  const unitId = currentUnitIdFromDom(); if (unitId) openUnit(unitId);
+}
+
+async function clearMessages(unitId) {
+  if (!confirm("Delete ALL imported messages for this unit? Templates and their version history are kept.")) return;
+  await api(`/api/units/${unitId}/messages`, { method: "DELETE" });
+  toast("Imported messages cleared ✓");
+  openUnit(unitId);
+}
+
 function currentUnitIdFromDom() {
   const btn = $("button[onclick^='doImport(']");
   if (!btn) return null;

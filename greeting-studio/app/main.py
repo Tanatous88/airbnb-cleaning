@@ -218,6 +218,35 @@ def update_message(message_id: int, body: MessageUpdate):
         conn.close()
 
 
+@app.delete("/api/messages/{message_id}")
+def delete_message(message_id: int):
+    conn = db.connect()
+    try:
+        row = conn.execute("SELECT * FROM thread_messages WHERE id = ?", (message_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Message not found")
+        conn.execute("DELETE FROM thread_messages WHERE id = ?", (message_id,))
+        conn.commit()
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+@app.delete("/api/units/{unit_id}/messages")
+def clear_messages(unit_id: int):
+    """Delete ALL imported messages for a unit (e.g. to purge sample data).
+    Templates and their version history are untouched."""
+    conn = db.connect()
+    try:
+        get_unit_or_404(conn, unit_id)
+        conn.execute("DELETE FROM thread_messages WHERE unit_id = ?", (unit_id,))
+        conn.execute("DELETE FROM imports WHERE unit_id = ?", (unit_id,))
+        conn.commit()
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
 @app.post("/api/units/{unit_id}/synthesize")
 def synthesize_template(unit_id: int):
     conn = db.connect()
