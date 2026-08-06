@@ -3,6 +3,7 @@ import json
 import os
 import re
 from datetime import date, timedelta
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -55,11 +56,11 @@ class UnitIn(BaseModel):
 
 
 class UnitUpdate(BaseModel):
-    name: str | None = None
-    listing_title: str | None = None
-    profile: str | None = None
-    amenities: dict | None = None
-    listing_description: str | None = None
+    name: Optional[str] = None
+    listing_title: Optional[str] = None
+    profile: Optional[str] = None
+    amenities: Optional[dict] = None
+    listing_description: Optional[str] = None
 
 
 @app.get("/api/units")
@@ -195,8 +196,8 @@ def list_messages(unit_id: int):
 
 
 class MessageUpdate(BaseModel):
-    sender: str | None = None
-    is_greeting: bool | None = None
+    sender: Optional[str] = None
+    is_greeting: Optional[bool] = None
 
 
 @app.put("/api/messages/{message_id}")
@@ -395,14 +396,14 @@ class StayIn(BaseModel):
 
 
 class StayUpdate(BaseModel):
-    guest_name: str | None = None
-    checkin_date: str | None = None
-    checkout_date: str | None = None
-    booking_message: str | None = None
-    guest_messages: str | None = None
-    status: str | None = None
-    draft_greeting: str | None = None
-    confirmation_code: str | None = None
+    guest_name: Optional[str] = None
+    checkin_date: Optional[str] = None
+    checkout_date: Optional[str] = None
+    booking_message: Optional[str] = None
+    guest_messages: Optional[str] = None
+    status: Optional[str] = None
+    draft_greeting: Optional[str] = None
+    confirmation_code: Optional[str] = None
 
 
 VALID_STATUSES = ("pending", "drafted", "reviewed", "sent")
@@ -766,12 +767,12 @@ def list_reviews(stay_id: int):
 # ---------------------------------------------------------------------------
 
 class SettingsIn(BaseModel):
-    host_signature: str | None = None
-    anthropic_model: str | None = None
-    default_checkin_time: str | None = None
-    default_checkout_time: str | None = None
-    core_items: list | None = None
-    api_key: str | None = None
+    host_signature: Optional[str] = None
+    anthropic_model: Optional[str] = None
+    default_checkin_time: Optional[str] = None
+    default_checkout_time: Optional[str] = None
+    core_items: Optional[list] = None
+    api_key: Optional[str] = None
 
 
 @app.get("/api/settings")
