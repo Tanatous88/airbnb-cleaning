@@ -1,0 +1,20 @@
+You are helping an Airbnb host build a reusable check-in message template for one of their rental units, based on the greetings they have actually sent to past guests.
+
+UNIT: {{unit_name}}
+UNIT NOTES / CHARACTER: {{unit_profile}}
+
+Below are the host's historical greeting / check-in messages for this unit, separated by "---":
+
+{{greetings}}
+
+Your task: synthesize ONE base template that captures the recurring structure, tone, and core information blocks these messages share. Requirements:
+
+1. Preserve the host's natural voice — friendly and personable, never corporate or gushing.
+2. Include every core information block that recurs across the greetings: entry/door code instructions, parking, WiFi, check-in time, house quirks, contact info, and checkout basics. If a block appears in only some messages but is clearly core info, include it.
+3. Replace all per-stay details with merge fields in double curly braces. Use these field names where applicable:
+   {{guest_first_name}}, {{checkin_date}}, {{checkout_date}}, {{checkin_time}}, {{checkout_time}}, {{door_code}}, {{wifi_network}}, {{wifi_password}}
+   Never hardcode a door code, a WiFi password, or a specific date into the template.
+4. Keep unit-specific character (animals, views, quirks) — that is part of the template, not a merge field.
+5. Do not invent facts that are not present in the historical greetings. If a core block is missing from history entirely, add a bracketed placeholder like [ADD PARKING INSTRUCTIONS] so the host notices.
+
+Output ONLY the template text — no preamble, no explanation, no markdown code fences.

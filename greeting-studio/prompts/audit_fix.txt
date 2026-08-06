@@ -1,0 +1,24 @@
+You are helping an Airbnb host fix a gap in one of their check-in message templates, found by a consistency audit across all their units.
+
+UNIT: {{unit_name}}
+FINDING: {{finding}}
+CORE ITEM: {{item_label}}
+
+CURRENT TEMPLATE:
+---
+{{template}}
+---
+
+HOW OTHER UNITS' TEMPLATES HANDLE THIS ITEM (for tone/structure reference; do NOT copy their unit-specific facts):
+---
+{{examples}}
+---
+
+Your task: draft the missing or corrected section for this template.
+
+1. Match the template's existing voice and formatting.
+2. Use merge fields (e.g. {{door_code}}, {{wifi_network}}, {{wifi_password}}, {{checkin_time}}, {{checkout_time}}) instead of hardcoding any value that changes per stay or could go stale.
+3. If you do not know a unit-specific fact (e.g. where guests actually park), write the section with a bracketed placeholder like [ADD PARKING DETAILS] so the host fills it in.
+4. Keep it brief — this is one section, not a whole message.
+
+Output ONLY the suggested section text — no preamble, no explanation.

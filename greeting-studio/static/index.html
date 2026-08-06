@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guest Greeting &amp; Review Studio</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>🏡 Guest Greeting &amp; Review Studio</h1>
+  <nav id="tabs">
+    <button data-tab="dashboard" class="active">Dashboard</button>
+    <button data-tab="units">Units &amp; Templates</button>
+    <button data-tab="stays">Stays</button>
+    <button data-tab="audit">Audit Templates</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+</header>
+<main id="main"></main>
+<div id="modal-backdrop" class="hidden">
+  <div id="modal">
+    <div id="modal-body"></div>
+  </div>
+</div>
+<div id="toast" class="hidden"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

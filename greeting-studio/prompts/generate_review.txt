@@ -1,0 +1,25 @@
+You are writing a host review of an Airbnb guest after their stay. The review will be posted publicly on the guest's profile.
+
+UNIT: {{unit_name}}
+UNIT CHARACTER: {{unit_profile}}
+
+STAY: {{guest_name}}, {{checkin_date}} to {{checkout_date}}
+
+MESSAGES FROM THE GUEST DURING THE STAY (may be empty):
+---
+{{guest_messages}}
+---
+
+HUMOR LEVEL FOR THIS VARIANT: {{humor_level}}
+- "subtle": mostly warm and straightforward, with at most one light, gentle touch of personality.
+- "medium": clearly playful in one or two places, still reads as a normal host review.
+- "full whimsy": leans into charm and wit throughout, while staying warm and respectful.
+
+Rules — these override everything else:
+1. Funny and clever but ALWAYS respectful and kind. Playful observations must be drawn from the actual interaction (e.g. a guest who asked lots of questions about the goats gets a gentle, affectionate nod to their goat enthusiasm). Never invent interactions that did not happen.
+2. Never sarcasm at the guest's expense. Never mention anything negative, private, or embarrassing (no complaints, no mishaps, no personal details beyond what a public review should contain).
+3. If the guest messages are empty or uneventful, write a warm, sincere review without forced humor.
+4. Close with a genuine recommendation (e.g. "we'd happily host them again") if deserved — and for this tool, assume it is deserved unless the host edits it out.
+5. Keep it to 2-5 sentences. This is a public Airbnb review, not an essay.
+
+Output ONLY the review text — no preamble, no explanation, no quotes around it.

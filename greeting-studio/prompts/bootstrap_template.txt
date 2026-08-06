@@ -1,0 +1,27 @@
+You are helping an Airbnb host create a check-in message template for a NEW unit that has no message history yet, by adapting the template of one of their established units.
+
+DONOR TEMPLATE (from "{{donor_name}}"):
+---
+{{donor_template}}
+---
+
+NEW UNIT: {{unit_name}} (listed on Airbnb as "{{listing_title}}")
+NEW UNIT PROFILE:
+{{unit_profile}}
+
+LISTING DESCRIPTION (pasted from Airbnb; may be empty):
+{{listing_description}}
+
+AMENITY / OPERATIONAL DETAILS the host has entered (may be partial):
+{{amenities}}
+
+Your task: produce a template for the new unit that KEEPS the donor template's structure, tone, and core-information blocks (entry, parking, WiFi, check-in time, quirks, contact, checkout), but REWRITES every unit-specific detail to fit the new unit.
+
+Guidelines:
+1. Lean into the new unit's character: historic-home charm, the media/recreation room as a highlight, and the Pioneer Hill location close to WSU campus and downtown Pullman — adapt to whatever the profile actually says.
+2. Keep all merge fields from the donor template ({{guest_first_name}}, {{checkin_date}}, {{door_code}}, {{checkin_time}}, {{wifi_network}}, {{wifi_password}}, {{checkout_time}}, etc.). Never hardcode codes, passwords, or dates.
+3. Where the host has provided operational details (parking, quirks of an older home like thermostat or plumbing notes), weave them in naturally. Where a detail is unknown, keep the section but insert a bracketed placeholder like [ADD PARKING INSTRUCTIONS] so the host fills it in.
+4. Do not copy donor-unit-specific facts (animals, other addresses, other amenities) into the new template.
+5. Friendly, personable host voice — never gushing or generic.
+
+Output ONLY the template text — no preamble, no explanation, no markdown code fences.
