@@ -1,0 +1,41 @@
+Subject: Welcome to The Cottage! Check-in details & guest guide 🏡
+
+Hi {{guest_first_name}},
+
+We are so excited to host you at The Cottage! This restored 1930s Pioneer Hill home blends historic charm with modern comfort — just a short walk from downtown Pullman and WSU.
+
+📍 Address & Arrival Instructions
+- Address: 510 SE High St, Pullman, WA 99163
+
+🚗 Parking
+- Private off-street parking is available on-site for your convenience.
+
+🔑 Keyless Check-In
+- Your unique access code (typically the last 4 digits of the cell phone number on your Airbnb account) will be sent via the Airbnb app. Any trouble unlocking, please reach out and we'll be happy to assist!
+
+📶 Wi-Fi & Entertainment
+- Wi-Fi Network: {{wifi_network}} | Password: {{wifi_password}}
+- Living & Media Lounges: Enjoy the main upstairs living room or head downstairs to the media lounge and bonus recreation space — both equipped with flat-screen TVs and comfortable seating.
+
+🛏️ Comfort & Amenities Inside
+- Sleep Number Beds: All three bedrooms (1 King, 2 Queens) feature Sleep Number mattresses, each with its own TV. Use the bedside remote to adjust firmness — top slider selects left or right side.
+- Backyard, Porch & Grill: Enjoy the private backyard and porch — gas grill available for your use.
+
+🏡 Property Rules & Etiquette
+- Pet Policy: We're happy to welcome your four-legged family members! Please keep pets off the furniture/beds and clean up after them in the yard.
+- Quiet Hours: 11:00 PM – 7:00 AM (please respect our Pioneer Hill neighbors).
+- Smoke-Free: This is a 100% non-smoking and non-vaping property, inside and out.
+
+🍞 Fresh & Warm Monkey Bread!
+Let us know your estimated arrival time when you can! We love timing the delivery of our homemade monkey bread so it's fresh and warm right as you arrive.
+
+📱 Need Anything?
+If you need dining tips for downtown or have questions during your stay, message us in the app or contact us directly:
+- Bruce: (805) 660-5852
+- Sue: (805) 297-0260
+
+Safe travels, and Go Cougs! 🐾
+
+Warmly,
+Bruce & Sue
+Three Forks Accommodations

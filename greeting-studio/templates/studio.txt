@@ -1,0 +1,43 @@
+Subject: Welcome to The Studio! Check-in details & music retreat tips 🎵
+
+Hi {{guest_first_name}},
+
+We are so excited to host you at The Studio! We've filled this lower-level 2-bedroom, 1.5-bath space with a custom music theme and plenty of entertainment to make your stay special.
+
+📍 Address & Arrival Instructions
+- Address: 605 SW Walnut St, Pullman, WA 99163
+
+🚗 Parking
+- The driveway is a bit tricky while being redone — please park in one of the spots at the top of the driveway, or feel free to park along the street. Take extra care along the pathway and newly redesigned stairs leading to the entrance.
+
+🔑 Keyless Check-In
+- Airbnb auto-assigns your entry code (typically the last 4 digits of your phone number). The door and weather seals are brand new — please pull or push the door firmly shut when locking so the electronic bolt slides fully into place. Any trouble, just message us!
+
+📶 Wi-Fi & Entertainment
+- Wi-Fi Network: {{wifi_network}} | Password: {{wifi_password}}
+- Karaoke Machines: Two in the studio room — message us for a quick rundown if needed.
+- Arcade Game: Multi-arcade machine in the main entryway; instructions posted next to the unit.
+- Projector TV: Use the silver controller to power on and let the projector warm up, then the black controller to turn on the main media unit and select your input. Live TV is available through the Spectrum app, along with several primary streaming apps.
+- Retro Record Player: Vinyl records are there for your enjoyment — please handle with care so we can keep the collection in great shape.
+
+🛏️ Comfort & Amenities Inside
+- Sleep Number Mattress: Located in the back bedroom near the washer/dryer. Use the nightstand remote to adjust firmness — top slider switches left/right side, choose your number and hit Set.
+
+🏡 Property Rules & Etiquette
+- Student & Family Visits: Guests are welcome to have visitors hang out, but only registered guests may stay overnight.
+- Quiet Hours: 11:00 PM – 7:00 AM.
+- Smoke-Free: This is a 100% non-smoking and non-vaping property.
+
+🍞 Fresh & Warm Monkey Bread!
+Let us know your estimated arrival time when you can! We love timing the delivery of our homemade monkey bread so it's fresh and warm right as you arrive.
+
+📱 Need Anything?
+If you have questions about the tech, amenities, or local spots, feel free to message us in the app or contact us directly:
+- Bruce: (805) 660-5852
+- Sue: (805) 297-0260
+
+Safe travels, and Go Cougs! 🐾
+
+Warmly,
+Bruce & Sue
+Three Forks Accommodations

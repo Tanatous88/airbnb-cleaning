@@ -1,0 +1,45 @@
+Subject: Welcome to The Cosmopolitan! Check-in details & guest guide 🥂
+
+Hi {{guest_first_name}},
+
+We are so excited to host you at The Cosmopolitan! Your unit is on the middle floor of our triplex at 315 SW Walnut Street.
+
+📍 Address & Arrival Instructions
+- Address: 315 SW Walnut Street, Pullman, WA 99163
+- Finding the Entrance: Use the white stairs at the front of the house. Your private entrance is the upper door at the top of the stairs.
+
+🚗 Parking
+- Our single-car driveway is first come, first served — unless a guest has an EV, in which case they get priority so they can charge. If the driveway is taken, there's plenty of street parking available nearby.
+
+🔑 Keyless Check-In
+- Door Lock: Eufy Smart Lock. Your access code is set to the last 4 digits of the cell phone number on your Airbnb account.
+- To lock when leaving: press and hold the Lock icon on the keypad.
+
+📶 Wi-Fi & Entertainment
+- Wi-Fi Network: {{wifi_network}} | Password: {{wifi_password}}
+- Plex TV App: Enjoy free movies and TV via the Plex app — log into either of the pre-set "Three Forks" guest profiles.
+- Streaming Services: Feel free to log into your own streaming accounts; just remember to log out before check-out.
+- Primo Beverage Station: Lift the flip-up lid on top of the machine, press the circular silver button to eject the pod loader, insert your pod, push the loader back in until it clicks, and select your cup size. Use the paddle buttons for ice-cold or piping-hot purified water.
+
+🔥 Climate Control (Fireplace & Mini-Splits)
+- Fireplace: Use the remote on the mantle to toggle flames and heat.
+- Mini-Splits: Each room has a wall-mounted unit with a white remote. All mini-split units in the property must be set to the same mode (Heat or Cool) or the system won't function, since they run on a shared system. To switch modes, slide down the front cover of the remote — Snowflake icon for AC, Sun icon for Heat.
+
+🏡 Property Rules & Etiquette
+- Student & Family Visits: Your WSU student is always welcome to visit and hang out — only registered guests may stay overnight.
+- Quiet Hours: 11:00 PM – 7:00 AM.
+- Smoke-Free: This is a 100% non-smoking and non-vaping property.
+
+🍞 Fresh & Warm Monkey Bread!
+Let us know your estimated arrival time when you can! We love timing the delivery of our homemade monkey bread so it's fresh and warm right as you arrive.
+
+📱 Need Anything?
+If you have questions or need local recommendations, message us in the app or reach out directly:
+- Bruce: (805) 660-5852
+- Sue: (805) 297-0260
+
+Safe travels, and Go Cougs! 🐾
+
+Warmly,
+Bruce & Sue
+Three Forks Accommodations

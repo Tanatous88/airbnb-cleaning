@@ -1,0 +1,48 @@
+Subject: Welcome to the Bunkhouse! Check-in details & warm treats 🏡
+
+Hi {{guest_first_name}},
+
+We are so excited to host you at The Bunkhouse! Because the Bunkhouse and our sibling unit (The Garage) are located on the same property as our main home, we've put together a few helpful details to make your arrival and stay seamless.
+
+📍 Address & Arrival Instructions
+- Address: 1303 Old Wawawai Rd, Pullman, WA 99163
+- Directions: Turn off Old Wawawai Rd onto our long driveway. Please drive slowly past our neighbors' house (on your left). As you approach our back lot, you'll see our main house. The Bunkhouse (classic, hotel-style exterior) is located just to the right of our main garage.
+
+🚗 Parking
+- You're welcome to park directly in front of the Bunkhouse under the covered carport on the concrete pad. Alternatively, park to the side of the main house — just kindly leave room for us to pull out of the garage.
+
+🔑 Keyless Check-In
+- Your unique door code will be sent via the Airbnb app on the morning of check-in. Any trouble unlocking, reach out right away — we're on the property and happy to help!
+
+📶 Wi-Fi & Entertainment
+- Wi-Fi Network: {{wifi_network}} | Password: {{wifi_password}}
+
+🛏️ Comfort & Amenities Inside
+- Cozy Feet: Concrete floors get chilly, so we've left complimentary slippers in the bedroom — yours to keep!
+- Sleep Number Bed: Adjust firmness with the bedroom remote; the top slider switches between left/right sides.
+- Lovesac Conversion Couch: Extra bedding is stored inside the ottoman. A nearby placard has a scannable QR code with quick visual instructions for converting the couch into a bed.
+
+🐄 Meet the Farm Animals!
+You're staying on our working hobby farm estate! You'll likely see our 4 mini Highland cows, 2 mini pigs, and 5 fainting goats.
+- All animals are friendly, but please use extra caution around our large bull — he swings his horns over the fence and doesn't realize how strong he is!
+- Want treats to feed them? Just let us know and we'll bring some over.
+- We also have 3 friendly barn cats who love visitors — watch out, they'll hop into your unit or car if doors are left open!
+
+🏡 Property Rules & Etiquette
+- Student & Family Visits: Guests are welcome to have visitors hang out, but only registered guests may stay overnight.
+- Quiet Hours: 11:00 PM – 7:00 AM.
+- Smoke-Free: This is a 100% non-smoking and non-vaping property.
+
+🍞 Fresh & Warm Monkey Bread!
+Let us know your estimated arrival time when you can! We love timing the delivery of our homemade monkey bread so it's fresh and warm right as you arrive.
+
+📱 Need Anything?
+We're right nearby if you need a hand during your stay:
+- Bruce: (805) 660-5852
+- Sue: (805) 297-0260
+
+Safe travels, and Go Cougs! 🐾
+
+Warmly,
+Bruce & Sue
+Three Forks Accommodations

@@ -1,0 +1,8 @@
+{
+  "The Bunkhouse":      {"wifi_network": "YOUR NETWORK", "wifi_password": "YOUR PASSWORD"},
+  "Three Forks Garage": {"wifi_network": "YOUR NETWORK", "wifi_password": "YOUR PASSWORD"},
+  "The Studio":         {"wifi_network": "YOUR NETWORK", "wifi_password": "YOUR PASSWORD"},
+  "The Midnight Nook":  {"wifi_network": "YOUR NETWORK", "wifi_password": "YOUR PASSWORD"},
+  "The Cosmopolitan":   {"wifi_network": "YOUR NETWORK", "wifi_password": "YOUR PASSWORD"},
+  "The Cottage":        {"wifi_network": "YOUR NETWORK", "wifi_password": "YOUR PASSWORD"}
+}

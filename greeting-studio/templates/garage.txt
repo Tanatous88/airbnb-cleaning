@@ -1,0 +1,52 @@
+Subject: Welcome to The Garage! Check-in details & property tips 🚜🐄
+
+Hi {{guest_first_name}},
+
+We are so excited to host you at The Garage! Because The Garage and our sibling unit (The Bunkhouse) are located on the same property as our main home, we've put together a few helpful details to make your arrival and stay seamless.
+
+📍 Address & Arrival Instructions
+- Address: 1303 Old Wawawai Rd, Pullman, WA 99163
+- Directions: Turn off Old Wawawai Rd onto our long driveway. Drive slowly past our neighbors' house (on your left). As you approach our back lot, The Garage will be on your right (look for a large dumpster and a red AIR sign near the building).
+
+🚗 Parking & EV Charging
+- Park on the concrete pad under the overhang by the red AIR sign (where the EV charger is located), or directly in front of the dumpster.
+- ⚠️ Wednesday Trash Pick-Up: If your stay includes a Wednesday daytime, please park under the carport or far to the right next to the workshop — the trash truck needs a clear path to the dumpster (they'll skip us if blocked!).
+
+🔑 Keyless Check-In
+- Your unique entry code will be sent via the Airbnb app on the morning of check-in. Any trouble unlocking, just give us a shout — we're on the property and happy to help!
+
+📶 Wi-Fi & Entertainment
+- Wi-Fi Network: {{wifi_network}} | Password: {{wifi_password}}
+
+🛏️ Comfort & Amenities Inside
+- Cozy Feet: Concrete floors get chilly, so we've left complimentary slippers in the bedroom — yours to keep!
+- Sleep Number Bed: Use the bedside remote to adjust firmness; the top slider switches between left/right sides.
+- Cabinet Murphy Bed: Simple instructions are attached to the cabinet. Extra bedding is stored in the cabinet's lower drawer and in the blue Lovesac bag near the main bed.
+
+🔥 Climate Control (Mini-Splits)
+- The two mini-split units on the back wall operate independently via their remotes. For best performance, keep both set to the same mode (Heat or Cool) within a few degrees of each other. Any trouble, message us — we can adjust them remotely!
+
+🐄 Meet the Farm Animals!
+You're staying right near our hobby farm! You'll likely see our 4 mini Highland cows, 2 mini pigs, and 5 fainting goats.
+- All animals are friendly, but please use extra caution around our large bull — he swings his horns over the fence and doesn't realize how strong he is!
+- Want treats to feed them? Just let us know and we'll bring some over.
+- We also have 3 friendly barn cats who love visitors — watch out, they'll hop into your unit or car if doors are left open!
+
+🏡 Property Rules & Etiquette
+- Student & Family Visits: Guests are welcome to have visitors hang out, but only registered guests may stay overnight.
+- Quiet Hours: 11:00 PM – 7:00 AM.
+- Smoke-Free: This is a 100% non-smoking and non-vaping property.
+
+🍞 Fresh & Warm Monkey Bread!
+Let us know your estimated arrival time when you can! We love timing the delivery of our homemade monkey bread so it's fresh and warm right as you arrive.
+
+📱 Need Anything?
+We're right nearby if you need a hand during your stay:
+- Bruce: (805) 660-5852
+- Sue: (805) 297-0260
+
+Safe travels, and Go Cougs! 🐾
+
+Warmly,
+Bruce & Sue
+Three Forks Accommodations

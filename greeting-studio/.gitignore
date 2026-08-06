@@ -5,3 +5,4 @@ __pycache__/
 .venv/
 venv/
 .pw-profile/
+local_values.json
