@@ -4,3 +4,4 @@ anthropic>=0.40
 python-dotenv>=1.0
 python-multipart>=0.0.9
 apscheduler>=3.10
+tzdata>=2024.1; sys_platform == "win32"

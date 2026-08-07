@@ -191,16 +191,33 @@ def build_queue_for_today(force: bool = False) -> dict:
 
 
 def _notify(summary: dict) -> None:
-    """Desktop notification (macOS) + the dashboard badge reads queue_last_summary."""
+    """Desktop notification (macOS or Windows); the dashboard badge always shows
+    the same summary regardless."""
     if summary["queued"] == 0:
         return
     text = f"{summary['queued']} arrival(s) queued for today"
     if summary["needs_setup"]:
         text += f" — {summary['needs_setup']} need setup"
+    import sys
     try:
-        subprocess.run(
-            ["osascript", "-e",
-             f'display notification "{text}" with title "Greeting Studio"'],
-            timeout=10, capture_output=True)
+        if sys.platform == "darwin":
+            subprocess.run(
+                ["osascript", "-e",
+                 f'display notification "{text}" with title "Greeting Studio"'],
+                timeout=10, capture_output=True)
+        elif sys.platform == "win32":
+            ps = (
+                "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, "
+                "ContentType = WindowsRuntime] > $null;"
+                "$t = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent("
+                "[Windows.UI.Notifications.ToastTemplateType]::ToastText02);"
+                "$n = $t.GetElementsByTagName('text');"
+                "$n.Item(0).AppendChild($t.CreateTextNode('Greeting Studio')) > $null;"
+                f"$n.Item(1).AppendChild($t.CreateTextNode('{text}')) > $null;"
+                "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("
+                "'Greeting Studio').Show([Windows.UI.Notifications.ToastNotification]::new($t))"
+            )
+            subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                           timeout=15, capture_output=True)
     except Exception:
-        pass  # non-macOS or no osascript — the dashboard badge still shows it
+        pass  # notification is best-effort — the dashboard badge still shows it
