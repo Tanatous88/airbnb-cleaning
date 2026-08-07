@@ -63,6 +63,7 @@ class UnitUpdate(BaseModel):
     profile: Optional[str] = None
     amenities: Optional[dict] = None
     listing_description: Optional[str] = None
+    ics_url: Optional[str] = None
 
 
 @app.get("/api/units")
@@ -114,7 +115,7 @@ def update_unit(unit_id: int, body: UnitUpdate):
     try:
         unit = get_unit_or_404(conn, unit_id)
         fields, values = [], []
-        for col in ("name", "listing_title", "profile", "listing_description"):
+        for col in ("name", "listing_title", "profile", "listing_description", "ics_url"):
             val = getattr(body, col)
             if val is not None:
                 fields.append(f"{col} = ?")
@@ -920,6 +921,8 @@ class SettingsIn(BaseModel):
     default_checkout_time: Optional[str] = None
     core_items: Optional[list] = None
     api_key: Optional[str] = None
+    hosting_ics_url: Optional[str] = None
+    listing_aliases: Optional[dict] = None
 
 
 @app.get("/api/settings")
@@ -933,6 +936,9 @@ def get_settings():
             "default_checkout_time": db.get_setting(conn, "default_checkout_time"),
             "core_items": db.get_core_items(conn),
             "api_key_set": bool(os.environ.get("ANTHROPIC_API_KEY", "").strip()),
+            "hosting_ics_url": db.get_setting(conn, "hosting_ics_url", ""),
+            "listing_aliases": json.loads(db.get_setting(conn, "listing_aliases", "{}") or "{}"),
+            "calendar_last_sync": db.get_setting(conn, "calendar_last_sync", ""),
         }
     finally:
         conn.close()
@@ -942,10 +948,13 @@ def get_settings():
 def update_settings(body: SettingsIn):
     conn = db.connect()
     try:
-        for key in ("host_signature", "anthropic_model", "default_checkin_time", "default_checkout_time"):
+        for key in ("host_signature", "anthropic_model", "default_checkin_time",
+                    "default_checkout_time", "hosting_ics_url"):
             val = getattr(body, key)
             if val is not None:
                 db.set_setting(conn, key, val)
+        if body.listing_aliases is not None:
+            db.set_setting(conn, "listing_aliases", json.dumps(body.listing_aliases, indent=2))
         if body.core_items is not None:
             for item in body.core_items:
                 if not (isinstance(item, dict) and item.get("key") and item.get("label")):

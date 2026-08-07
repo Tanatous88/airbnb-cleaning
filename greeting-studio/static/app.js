@@ -150,7 +150,9 @@ async function runQueue(btn) {
   busy(btn, true);
   try {
     const r = await api("/api/queue/run?force=true", { method: "POST" });
-    toast(`Queue rebuilt: ${r.queued} drafted, ${r.needs_setup} need setup ✓`);
+    const sync = r.sync ? ` (calendar sync: +${r.sync.added} new, ${r.sync.updated} updated)` : "";
+    toast(`Queue rebuilt: ${r.queued} drafted, ${r.needs_setup} need setup${sync} ✓`);
+    if (r.errors && r.errors.length) setTimeout(() => toast(r.errors[0], true), 3600);
     renderDashboard();
   } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
 }
@@ -288,6 +290,9 @@ async function openUnit(unitId) {
     <textarea id="unit-profile">${esc(unit.profile || "")}</textarea>
     <label>Airbnb listing description (paste to enrich bootstrapping)</label>
     <textarea id="unit-listing-desc">${esc(unit.listing_description || "")}</textarea>
+    <label>Airbnb calendar feed URL (auto-syncs stays every morning; from Airbnb → Calendar → Connect to another website)</label>
+    <input id="unit-ics-url" value="${esc(unit.ics_url || "")}" placeholder="https://www.airbnb.com/calendar/ical/....ics?t=...">
+
     <div style="margin-top:8px"><button onclick="saveUnitDetails(${unitId}, this)">Save details</button></div>
   </div>
 
@@ -390,7 +395,8 @@ async function saveUnitDetails(unitId, btn) {
     const quirks = $("#am-quirks").value.trim();
     if (quirks) amenities.quirks = quirks;
     await api(`/api/units/${unitId}`, { method: "PUT", body: {
-      amenities, profile: $("#unit-profile").value, listing_description: $("#unit-listing-desc").value } });
+      amenities, profile: $("#unit-profile").value, listing_description: $("#unit-listing-desc").value,
+      ics_url: $("#unit-ics-url").value.trim() } });
     toast("Details saved ✓");
   } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
 }
@@ -696,6 +702,18 @@ async function renderSettings() {
     </div>
   </div>
   <div class="card">
+    <h3>Calendar auto-sync</h3>
+    <p class="muted small">Per-unit Airbnb feeds are set on each unit's page. Optionally add your
+      "Airbnb Hosting Schedules" Google calendar's <b>secret iCal address</b> here — it supplies guest
+      names and party details the raw Airbnb feeds omit (Google Calendar → Settings → that calendar →
+      Integrate calendar → Secret address in iCal format).
+      ${s.calendar_last_sync ? `Last sync: ${esc(s.calendar_last_sync.replace("T", " ").slice(0, 16))} UTC.` : ""}</p>
+    <label>Hosting Schedules secret iCal URL</label>
+    <input id="set-hosting-ics" value="${esc(s.hosting_ics_url || "")}" placeholder="https://calendar.google.com/calendar/ical/.../basic.ics">
+    <label>Listing name → unit aliases (JSON; matches the "Listing:" text in calendar events)</label>
+    <textarea id="set-aliases" class="mono">${esc(JSON.stringify(s.listing_aliases, null, 2))}</textarea>
+  </div>
+  <div class="card">
     <h3>Core information checklist <span class="muted small">(drives the audit matrix — JSON, editable)</span></h3>
     <textarea id="set-core" class="tall mono">${esc(JSON.stringify(s.core_items, null, 2))}</textarea>
   </div>
@@ -705,13 +723,16 @@ async function renderSettings() {
 async function saveSettings(btn) {
   busy(btn, true);
   try {
-    let core;
+    let core, aliases;
     try { core = JSON.parse($("#set-core").value); }
     catch (e) { throw new Error("Core items JSON is invalid: " + e.message); }
+    try { aliases = JSON.parse($("#set-aliases").value); }
+    catch (e) { throw new Error("Listing aliases JSON is invalid: " + e.message); }
     const body = {
       anthropic_model: $("#set-model").value, host_signature: $("#set-sig").value,
       default_checkin_time: $("#set-ci").value, default_checkout_time: $("#set-co").value,
-      core_items: core };
+      core_items: core, listing_aliases: aliases,
+      hosting_ics_url: $("#set-hosting-ics").value.trim() };
     const key = $("#set-key").value.trim();
     if (key) body.api_key = key;
     await api("/api/settings", { method: "PUT", body });

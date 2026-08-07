@@ -202,6 +202,11 @@ def _ics_date(value: str) -> str:
     return ""
 
 
+def _ics_unescape(value: str) -> str:
+    return (value.replace("\\n", "\n").replace("\\N", "\n")
+                 .replace("\\,", ",").replace("\\;", ";").replace("\\\\", "\\"))
+
+
 SKIP_SUMMARIES = ("not available", "blocked", "airbnb (not available)")
 
 
@@ -249,3 +254,61 @@ def parse_ics(text: str) -> list:
             "confirmation_code": code,
         })
     return stays
+
+
+# ---------------------------------------------------------------------------
+# "Airbnb Hosting Schedules" Google-calendar feed (rich events with guest
+# names, party size, confirmation code, listing, status)
+# ---------------------------------------------------------------------------
+
+def _desc_field(desc: str, label: str) -> str:
+    m = re.search(rf"^{re.escape(label)}:\s*(.+)$", desc, re.MULTILINE | re.IGNORECASE)
+    return m.group(1).strip() if m else ""
+
+
+def parse_hosting_ics(text: str) -> list:
+    """Parse the enriched hosting-schedule calendar. Events look like:
+    SUMMARY: 'Unique Garage Studio — Tawni Allen'
+    DESCRIPTION: 'Guest: ...\\nParty: ...\\nListing: ...\\nConfirmation: HM...\\n
+                  Check-in: ...\\nStatus: Confirmed\\n...'
+    Returns entries with listing text for unit-alias matching."""
+    events = []
+    current = None
+    for line in _unfold_ics(text):
+        if line.startswith("BEGIN:VEVENT"):
+            current = {}
+        elif line.startswith("END:VEVENT"):
+            if current is not None:
+                events.append(current)
+            current = None
+        elif current is not None and ":" in line:
+            key, _, value = line.partition(":")
+            current[key.split(";")[0].upper()] = value
+
+    entries = []
+    for ev in events:
+        summary = _ics_unescape(ev.get("SUMMARY", "")).strip()
+        desc = _ics_unescape(ev.get("DESCRIPTION", ""))
+        checkin = _ics_date(ev.get("DTSTART", ""))
+        checkout = _ics_date(ev.get("DTEND", ""))
+        if not (checkin and checkout):
+            continue
+        status = _desc_field(desc, "Status")
+        if status and re.search(r"trip requested|cancel", status, re.IGNORECASE):
+            continue  # not an accepted booking
+        guest = _desc_field(desc, "Guest")
+        if not guest and "—" in summary:
+            guest = summary.split("—", 1)[1].strip()
+        if not guest and " - " in summary:
+            guest = summary.split(" - ", 1)[1].strip()
+        code_m = re.search(r"Confirmation:\s*([A-Z0-9]+)", desc, re.IGNORECASE)
+        entries.append({
+            "guest_name": guest,
+            "checkin_date": checkin,
+            "checkout_date": checkout,
+            "confirmation_code": code_m.group(1).strip() if code_m else "",
+            "party": _desc_field(desc, "Party"),
+            "listing": _desc_field(desc, "Listing") or summary.split("—", 1)[0].strip(),
+            "status": status,
+        })
+    return entries

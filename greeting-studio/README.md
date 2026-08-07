@@ -85,8 +85,20 @@ playwright install chromium
 ## Day-of-arrival queue + one-click send
 
 Every morning at **7:00 AM Pacific** (and on app start, if the 7 AM run was missed —
-e.g. the Mac was asleep), a scheduled job drafts a welcome message for every stay
-checking in **today**, fully unattended:
+e.g. the machine was asleep), a scheduled job first **auto-syncs the calendars**,
+then drafts a welcome message for every stay checking in **today**, fully unattended:
+
+**Calendar auto-sync** replaces manual .ics imports. Two feed types combine:
+- Each unit's **Airbnb iCal feed URL** (unit page → "Airbnb calendar feed URL";
+  from Airbnb → Calendar → Availability → Connect to another website). These give
+  dates + confirmation codes, but Airbnb omits guest names.
+- Optionally, the **"Airbnb Hosting Schedules"** Google calendar's secret iCal
+  address (Settings → Calendar auto-sync). Its enriched events supply guest names
+  and party size, merged into the same stays by confirmation code. Listing-name →
+  unit mapping is the editable `listing_aliases` JSON in Settings.
+
+A stay whose guest name is still unknown is queued as **needs setup** — the app
+will never send "Hi Guest," to anyone.
 
 - Uses the unit's latest template with all merge fields substituted; if the guest
   left a booking message (or the best-effort Airbnb thread reader finds their

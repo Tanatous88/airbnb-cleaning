@@ -13,7 +13,9 @@ import re
 import subprocess
 from datetime import date, datetime, timezone
 
-from . import db
+import urllib.request
+
+from . import db, parsers
 from .claude import ClaudeError, ask_claude, render_prompt
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -38,6 +40,8 @@ def build_merge_values(conn, unit, stay) -> dict:
         except ValueError:
             return iso
 
+    if first_name.lower() in ("guest", "reserved"):  # calendar sync couldn't get a name
+        first_name = "[MISSING]"
     return {
         "guest_first_name": first_name,
         "checkin_date": pretty_date(stay["checkin_date"]),
@@ -76,6 +80,131 @@ def audit(event: str, unit_name: str, guest_name: str, detail: str = "") -> None
     line = f"{stamp}\t{event}\t{unit_name}\t{guest_name}\t{detail}\n"
     with open(AUDIT_LOG_PATH, "a", encoding="utf-8") as f:
         f.write(line)
+
+
+# ---------------------------------------------------------------------------
+# Calendar auto-sync (runs before every queue build)
+# ---------------------------------------------------------------------------
+
+UNKNOWN_GUEST = "Guest (see Airbnb)"
+SYNC_LOOKBACK_DAYS = 45  # keep recent past stays so the review generator has them
+
+
+def _fetch(url: str) -> str:
+    with urllib.request.urlopen(url, timeout=30) as resp:
+        return resp.read().decode("utf-8", errors="replace")
+
+
+def _upsert_stay(conn, unit_id: int, s: dict) -> str:
+    """Insert or update a stay, matching by confirmation code first (stable
+    across guest-name/date corrections), else unit+checkin+guest."""
+    code = (s.get("confirmation_code") or "").strip()
+    row = None
+    if code:
+        row = conn.execute("SELECT * FROM stays WHERE confirmation_code = ?", (code,)).fetchone()
+    if not row:
+        row = conn.execute(
+            "SELECT * FROM stays WHERE unit_id = ? AND checkin_date = ? AND guest_name = ?",
+            (unit_id, s["checkin_date"], s["guest_name"])).fetchone()
+    if not row:
+        # Absorb name/no-name pairs for the same unit+check-in: a nameless
+        # raw-feed stay matches an incoming named entry, and vice versa.
+        if s["guest_name"] == UNKNOWN_GUEST:
+            row = conn.execute(
+                "SELECT * FROM stays WHERE unit_id = ? AND checkin_date = ?",
+                (unit_id, s["checkin_date"])).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT * FROM stays WHERE unit_id = ? AND checkin_date = ? AND guest_name = ?",
+                (unit_id, s["checkin_date"], UNKNOWN_GUEST)).fetchone()
+    if row:
+        updates, values = [], []
+        if s["guest_name"] != UNKNOWN_GUEST and s["guest_name"] != row["guest_name"]:
+            updates.append("guest_name = ?"); values.append(s["guest_name"])
+        for col in ("checkin_date", "checkout_date"):
+            if s[col] != row[col]:
+                updates.append(f"{col} = ?"); values.append(s[col])
+        if code and not row["confirmation_code"]:
+            updates.append("confirmation_code = ?"); values.append(code)
+        if s.get("booking_message") and not (row["booking_message"] or "").strip():
+            updates.append("booking_message = ?"); values.append(s["booking_message"])
+        if updates:
+            values.append(row["id"])
+            conn.execute(f"UPDATE stays SET {', '.join(updates)} WHERE id = ?", values)
+            return "updated"
+        return "unchanged"
+    conn.execute(
+        "INSERT INTO stays (unit_id, guest_name, checkin_date, checkout_date, booking_message, "
+        "confirmation_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (unit_id, s["guest_name"], s["checkin_date"], s["checkout_date"],
+         s.get("booking_message", ""), code, db.now()))
+    return "added"
+
+
+def sync_calendars() -> dict:
+    """Pull bookings from (1) each unit's Airbnb iCal feed (dates + confirmation
+    codes; Airbnb omits guest names) and (2) the enriched 'Hosting Schedules'
+    feed if configured (guest names, party size), merged by confirmation code."""
+    from datetime import timedelta
+    cutoff = (date.today() - timedelta(days=SYNC_LOOKBACK_DAYS)).isoformat()
+    summary = {"added": 0, "updated": 0, "unchanged": 0, "errors": []}
+    conn = db.connect()
+    try:
+        units = conn.execute("SELECT * FROM units").fetchall()
+        for unit in units:
+            url = (unit["ics_url"] or "").strip()
+            if not url:
+                continue
+            try:
+                stays = parsers.parse_ics(_fetch(url))
+            except Exception as e:
+                summary["errors"].append(f"{unit['name']} feed: {e}")
+                continue
+            for s in stays:
+                if s["checkin_date"] < cutoff:
+                    continue
+                if not s["guest_name"] or s["guest_name"].lower().startswith("reserved"):
+                    s["guest_name"] = UNKNOWN_GUEST
+                summary[_upsert_stay(conn, unit["id"], s)] += 1
+
+        hosting_url = db.get_setting(conn, "hosting_ics_url", "").strip()
+        if hosting_url:
+            try:
+                aliases = json.loads(db.get_setting(conn, "listing_aliases", "{}"))
+            except json.JSONDecodeError:
+                aliases = {}
+            unit_by_name = {u["name"]: u["id"] for u in units}
+            try:
+                entries = parsers.parse_hosting_ics(_fetch(hosting_url))
+            except Exception as e:
+                entries = []
+                summary["errors"].append(f"Hosting Schedules feed: {e}")
+            for s in entries:
+                if s["checkin_date"] < cutoff:
+                    continue
+                listing = (s.get("listing") or "").lower()
+                unit_id = None
+                for needle, unit_name in aliases.items():
+                    if needle.lower() in listing and unit_name in unit_by_name:
+                        unit_id = unit_by_name[unit_name]
+                        break
+                if unit_id is None:
+                    summary["errors"].append(
+                        f"No unit alias matches listing {s.get('listing', '?')!r} "
+                        f"(guest {s['guest_name']}) — add it to listing_aliases in Settings.")
+                    continue
+                if not s["guest_name"]:
+                    s["guest_name"] = UNKNOWN_GUEST
+                if s.get("party"):
+                    s["booking_message"] = f"(from calendar) Party: {s['party']}"
+                summary[_upsert_stay(conn, unit_id, s)] += 1
+        conn.commit()
+        db.set_setting(conn, "calendar_last_sync", db.now())
+        db.set_setting(conn, "calendar_last_sync_summary", json.dumps(summary))
+        conn.commit()
+    finally:
+        conn.close()
+    return summary
 
 
 # ---------------------------------------------------------------------------
@@ -126,11 +255,13 @@ def _read_thread_context(stay) -> str:
 
 
 def build_queue_for_today(force: bool = False) -> dict:
-    """Draft a welcome message for every stay checking in today. Idempotent:
-    stays already queued today are skipped unless force=True."""
+    """Sync calendars, then draft a welcome message for every stay checking in
+    today. Idempotent: stays already queued today are skipped unless force=True."""
+    sync = sync_calendars()
     today = date.today().isoformat()
     conn = db.connect()
-    summary = {"date": today, "queued": 0, "skipped": 0, "needs_setup": 0, "errors": []}
+    summary = {"date": today, "queued": 0, "skipped": 0, "needs_setup": 0,
+               "errors": list(sync["errors"]), "sync": sync}
     try:
         stays = conn.execute(
             "SELECT * FROM stays WHERE checkin_date = ? AND status != 'sent'", (today,)
@@ -156,8 +287,15 @@ def build_queue_for_today(force: bool = False) -> dict:
                 missing = missing_fields(tpl["content"], merge_values)
                 if missing:
                     status, message = "needs_setup", ""
-                    error = ("Missing amenity value(s): " + ", ".join(missing) +
-                             " — fill them in on the unit's Amenities form, then Rebuild.")
+                    problems = []
+                    if "guest_first_name" in missing:
+                        problems.append("guest name unknown (Airbnb's calendar feed omits names) "
+                                        "— open the stay and set the guest's name")
+                    amen = [f for f in missing if f != "guest_first_name"]
+                    if amen:
+                        problems.append("missing amenity value(s): " + ", ".join(amen) +
+                                        " — fill them in on the unit's Amenities form")
+                    error = "; ".join(problems) + ". Then click Rebuild."
                 else:
                     thread_context = _read_thread_context(stay)
                     message, note = _personalize(conn, unit, stay, tpl["content"], merge_values,

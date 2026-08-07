@@ -170,9 +170,31 @@ def connect() -> sqlite3.Connection:
     return conn
 
 
+DEFAULT_LISTING_ALIASES = {
+    "bunkhouse": "The Bunkhouse",
+    "mini cows": "The Bunkhouse",
+    "rustic retreat": "The Bunkhouse",
+    "garage studio": "Three Forks Garage",
+    "garage": "Three Forks Garage",
+    "fun music": "The Studio",
+    "karaoke": "The Studio",
+    "midnight nook": "The Midnight Nook",
+    "cosmopolitan": "The Cosmopolitan",
+    "modern 2br": "The Cosmopolitan",
+    "chef's kitchen": "The Cosmopolitan",
+    "cottage": "The Cottage",
+    "pioneer hill": "The Cottage",
+}
+
+
 def init_db() -> None:
     conn = connect()
     conn.executescript(SCHEMA)
+    # Lightweight migrations for DBs created before these columns existed
+    try:
+        conn.execute("ALTER TABLE units ADD COLUMN ics_url TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
     # Seed units (idempotent — keyed on airbnb_listing_id)
     for u in SEED_UNITS:
         existing = conn.execute(
@@ -191,6 +213,8 @@ def init_db() -> None:
         "anthropic_model": os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
         "default_checkin_time": "4:00 PM",
         "default_checkout_time": "11:00 AM",
+        "hosting_ics_url": "",
+        "listing_aliases": json.dumps(DEFAULT_LISTING_ALIASES, indent=2),
     }
     for k, v in defaults.items():
         conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, v))

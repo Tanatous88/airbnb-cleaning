@@ -1,5 +1,7 @@
 {
-  "The Bunkhouse":      {"wifi_network": "YOUR NETWORK", "wifi_password": "YOUR PASSWORD"},
+  "_hosting_ics_url": "https://calendar.google.com/calendar/ical/.../basic.ics (optional: your 'Airbnb Hosting Schedules' secret iCal address — adds guest names)",
+  "The Bunkhouse":      {"wifi_network": "YOUR NETWORK", "wifi_password": "YOUR PASSWORD",
+                         "ics_url": "https://www.airbnb.com/calendar/ical/<listing_id>.ics?t=<token>"},
   "Three Forks Garage": {"wifi_network": "YOUR NETWORK", "wifi_password": "YOUR PASSWORD"},
   "The Studio":         {"wifi_network": "YOUR NETWORK", "wifi_password": "YOUR PASSWORD"},
   "The Midnight Nook":  {"wifi_network": "YOUR NETWORK", "wifi_password": "YOUR PASSWORD"},

@@ -83,14 +83,23 @@ def main() -> None:
             version = db.save_template(conn, unit["id"], content, source="manual",
                                        note="Harmonized welcome message")
             wifi_note = ""
-            values = local_values.get(unit_name)
+            values = dict(local_values.get(unit_name) or {})
+            ics_url = values.pop("ics_url", None)
+            if ics_url is not None:
+                conn.execute("UPDATE units SET ics_url = ? WHERE id = ?", (ics_url, unit["id"]))
+                wifi_note += ", calendar feed set"
             if values:
                 amenities = json.loads(unit["amenities"] or "{}")
                 amenities.update(values)
                 conn.execute("UPDATE units SET amenities = ? WHERE id = ?",
                              (json.dumps(amenities), unit["id"]))
-                wifi_note = f", Wi-Fi set to {values.get('wifi_network', '?')!r}"
+                wifi_note += f", Wi-Fi set to {values.get('wifi_network', '?')!r}"
             print(f"✓ {unit_name}: template v{version} loaded{wifi_note}")
+
+        hosting_url = local_values.get("_hosting_ics_url")
+        if hosting_url:
+            db.set_setting(conn, "hosting_ics_url", hosting_url)
+            print("✓ Hosting Schedules calendar feed configured")
 
         db.set_setting(conn, "core_items", json.dumps(CORE_ITEMS, indent=2))
         db.set_setting(conn, "host_signature", HOST_SIGNATURE)
