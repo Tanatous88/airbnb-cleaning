@@ -82,6 +82,35 @@ playwright install chromium
    observations only from the guest's actual messages, never negative or private, closing
    with a genuine recommendation. Edit and copy — never auto-posted.
 
+## Day-of-arrival queue + one-click send
+
+Every morning at **7:00 AM Pacific** (and on app start, if the 7 AM run was missed —
+e.g. the Mac was asleep), a scheduled job drafts a welcome message for every stay
+checking in **today**, fully unattended:
+
+- Uses the unit's latest template with all merge fields substituted; if the guest
+  left a booking message (or the best-effort Airbnb thread reader finds their
+  messages), Claude weaves in one personalized opening line in your host voice.
+- A draft with any unresolved value (e.g. Wi-Fi missing from the unit's Amenities)
+  is flagged **needs setup** and physically cannot be sent until fixed + requeued.
+- The **Today's Arrivals** section at the top of the Dashboard shows one card per
+  guest: editable draft + a single **Send** button. A macOS notification summarizes
+  the morning run.
+
+**Send** is the only human gate — clicking it is your approval. It drives the
+persistent Playwright browser (same `.pw-profile/` login you use for the fill-only
+assist) to open the reservation thread, paste the message, and submit it. On
+success the row is marked sent and logged to the stay's history; on failure
+(Airbnb changes its markup periodically) the card shows the actual error with a
+**Retry** button — failures are never silent. If your Airbnb login lapses, a
+"session expired" banner appears; open the fill-only assist once and log back in.
+Every send attempt is also appended to `send_audit.log`, a plain-text record
+independent of the database.
+
+The app must be running for the morning job (leave `python run.py` up, or just
+start it when you sit down — the startup catch-up builds the queue immediately).
+Sends require Playwright: `pip install playwright && playwright install chromium`.
+
 ## Exporting / pasting Airbnb threads
 
 Airbnb has no host-messaging API, so imports are copy/paste:

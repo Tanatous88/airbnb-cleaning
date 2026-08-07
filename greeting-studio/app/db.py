@@ -76,6 +76,19 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS daily_queue (
+    id INTEGER PRIMARY KEY,
+    stay_id INTEGER NOT NULL REFERENCES stays(id) ON DELETE CASCADE,
+    unit_id INTEGER NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+    guest_name TEXT NOT NULL,
+    checkin_date TEXT NOT NULL,
+    message TEXT DEFAULT '',
+    status TEXT DEFAULT 'ready',          -- ready | needs_setup | sent | failed
+    error TEXT DEFAULT '',
+    thread_ref TEXT DEFAULT '',           -- Airbnb confirmation code used for the thread
+    created_at TEXT NOT NULL,
+    sent_at TEXT DEFAULT ''
+);
 """
 
 DEFAULT_CORE_ITEMS = [

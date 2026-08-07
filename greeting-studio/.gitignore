@@ -6,3 +6,4 @@ __pycache__/
 venv/
 .pw-profile/
 local_values.json
+send_audit.log

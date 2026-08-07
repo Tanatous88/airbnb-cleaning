@@ -75,9 +75,29 @@ function showTab(name) {
 
 async function renderDashboard() {
   main.innerHTML = `<div class="muted">Loading…</div>`;
-  const [dash, units] = await Promise.all([api("/api/dashboard"), api("/api/units")]);
+  const [dash, units, queue] = await Promise.all([
+    api("/api/dashboard"), api("/api/units"), api("/api/queue")]);
   const noTemplates = units.filter(u => !u.template_version).map(u => u.name);
-  let html = `<h2>Next 7 days ${dash.due_count ? `<span class="badge due">⚠ ${dash.due_count} greeting${dash.due_count > 1 ? "s" : ""} due</span>` : ""}</h2>`;
+  let html = "";
+
+  if (queue.session_expired) {
+    html += `<div class="contradiction" style="border-left-color:var(--red);background:#fdecea">
+      <b>Airbnb session expired</b> — the send automation can't log in. Click "Browser assist" on any
+      draft to open a window and log in to Airbnb again, then retry.</div>`;
+  }
+
+  html += `<h2>Today's Arrivals ${queue.items.length ? `<span class="badge ${queue.items.some(i => i.status === "needs_setup") ? "due" : "reviewed"}">${queue.items.filter(i => i.status !== "sent").length} pending</span>` : ""}
+    <button class="secondary small" style="float:right" onclick="runQueue(this)">↻ Rebuild queue now</button></h2>`;
+  html += `<p class="muted small">Drafts are generated automatically every morning at 7:00 AM Pacific
+    (and on app start if the 7 AM run was missed). Nothing sends without your Send click.
+    ${queue.last_run ? `Last run: ${esc(queue.last_run.replace("T", " ").slice(0, 16))} UTC.` : "No run yet today."}</p>`;
+  if (!queue.items.length) {
+    html += `<div class="card muted small">No check-ins today.</div>`;
+  } else {
+    html += queue.items.map(renderQueueCard).join("");
+  }
+
+  html += `<h2>Next 7 days ${dash.due_count ? `<span class="badge due">⚠ ${dash.due_count} greeting${dash.due_count > 1 ? "s" : ""} due</span>` : ""}</h2>`;
   if (!dash.stays.length) {
     html += `<div class="card empty-state"><div class="big">🌤</div>
       No check-ins in the next 7 days.<br><span class="small">Add stays on the Stays tab (manual, CSV, or Airbnb .ics import).</span></div>`;
@@ -101,6 +121,72 @@ async function renderDashboard() {
     html += `<div class="card muted small">Units without a template yet: <b>${noTemplates.map(esc).join(", ")}</b> — build them on the Units tab so drafting works.</div>`;
   }
   main.innerHTML = html;
+}
+
+function renderQueueCard(q) {
+  const badge = { ready: "reviewed", needs_setup: "due", sent: "sent", failed: "due" }[q.status] || "pending";
+  const label = { ready: "ready", needs_setup: "needs setup", sent: "sent ✓", failed: "failed" }[q.status] || q.status;
+  const editable = q.status !== "sent";
+  return `<div class="card">
+    <div class="row" style="justify-content:space-between">
+      <b>${esc(q.unit_name)} — ${esc(q.guest_name)}</b>
+      <span class="badge ${badge}">${label}</span>
+    </div>
+    ${q.error ? `<p class="small" style="color:var(--red);margin:6px 0">${esc(q.error)}</p>` : ""}
+    ${q.status === "needs_setup"
+      ? `<p class="muted small">Fix the setup above, then click Rebuild queue now.</p>`
+      : `<textarea id="q-msg-${q.id}" class="tall" ${editable ? "" : "readonly"}>${esc(q.message)}</textarea>
+         <div class="row" style="margin-top:8px">
+           ${q.status === "sent"
+             ? `<span class="muted small">Sent ${esc((q.sent_at || "").replace("T", " ").slice(0, 16))} UTC — logged.</span>`
+             : `<button onclick="sendQueueItem(${q.id}, this)">${q.status === "failed" ? "Retry send" : "Send"}</button>
+                <button class="secondary" onclick="saveQueueEdit(${q.id}, this)">Save edit</button>
+                <button class="secondary" onclick="queueAssist(${q.id})">Browser assist (fill only)</button>`}
+         </div>`}
+  </div>`;
+}
+
+async function runQueue(btn) {
+  busy(btn, true);
+  try {
+    const r = await api("/api/queue/run?force=true", { method: "POST" });
+    toast(`Queue rebuilt: ${r.queued} drafted, ${r.needs_setup} need setup ✓`);
+    renderDashboard();
+  } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
+}
+
+async function saveQueueEdit(id, btn) {
+  busy(btn, true);
+  try {
+    await api(`/api/queue/${id}`, { method: "PUT", body: { message: $(`#q-msg-${id}`).value } });
+    toast("Edit saved ✓");
+  } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
+}
+
+async function sendQueueItem(id, btn) {
+  if (!confirm("Send this message to the guest's Airbnb thread now?")) return;
+  busy(btn, true);
+  try {
+    const r = await api(`/api/queue/${id}/send`, { method: "POST",
+      body: { message: $(`#q-msg-${id}`).value } });
+    toast(r.detail || "Sent ✓");
+    renderDashboard();
+  } catch (e) {
+    toast(e.message, true);
+    renderDashboard();  // show the failed status + retry button
+  } finally { busy(btn, false); }
+}
+
+async function queueAssist(id) {
+  const queue = await api("/api/queue");
+  const q = queue.items.find(x => x.id === id);
+  if (!q) return;
+  await copyText($(`#q-msg-${id}`) ? $(`#q-msg-${id}`).value : q.message);
+  try {
+    const r = await api(`/api/stays/${q.stay_id}/assist`, { method: "POST",
+      body: { content: $(`#q-msg-${id}`).value } });
+    toast(r.detail);
+  } catch (e) { toast(e.message, true); }
 }
 
 /* ---------------- Units & Templates ---------------- */

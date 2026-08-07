@@ -12,7 +12,9 @@ from pydantic import BaseModel
 
 from . import audit as audit_mod
 from . import db, parsers
+from . import queue as queue_mod
 from .claude import ClaudeError, ask_claude, render_prompt, set_api_key
+from .queue import build_merge_values
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -594,32 +596,6 @@ def dashboard():
 # Feature 4: greeting drafting + approval
 # ---------------------------------------------------------------------------
 
-def build_merge_values(conn, unit, stay) -> dict:
-    amenities = json.loads(unit["amenities"] or "{}")
-    first_name = stay["guest_name"].split()[0] if stay["guest_name"].strip() else "[MISSING]"
-
-    def pretty_date(iso):
-        try:
-            d = date.fromisoformat(iso)
-            # %-d is not supported on Windows; format the day number manually
-            return f"{d.strftime('%A, %B')} {d.day}"
-        except ValueError:
-            return iso
-
-    return {
-        "guest_first_name": first_name,
-        "checkin_date": pretty_date(stay["checkin_date"]),
-        "checkout_date": pretty_date(stay["checkout_date"]),
-        "checkin_time": amenities.get("checkin_time")
-                        or db.get_setting(conn, "default_checkin_time", "4:00 PM"),
-        "checkout_time": amenities.get("checkout_time")
-                         or db.get_setting(conn, "default_checkout_time", "11:00 AM"),
-        "door_code": amenities.get("door_code") or "[MISSING]",
-        "wifi_network": amenities.get("wifi_network") or "[MISSING]",
-        "wifi_password": amenities.get("wifi_password") or "[MISSING]",
-    }
-
-
 @app.post("/api/stays/{stay_id}/draft")
 def draft_greeting(stay_id: int):
     conn = db.connect()
@@ -789,6 +765,148 @@ def list_reviews(stay_id: int):
         return [dict(r) for r in rows]
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Day-of-arrival queue (scheduled 7:00 AM Pacific) + one-click send
+# ---------------------------------------------------------------------------
+
+@app.get("/api/queue")
+def get_queue():
+    conn = db.connect()
+    try:
+        today = date.today().isoformat()
+        rows = conn.execute(
+            "SELECT q.*, u.name AS unit_name FROM daily_queue q JOIN units u ON u.id = q.unit_id "
+            "WHERE q.checkin_date = ? ORDER BY q.status = 'sent', u.name", (today,)).fetchall()
+        summary_raw = db.get_setting(conn, "queue_last_summary", "")
+        return {
+            "today": today,
+            "items": [dict(r) for r in rows],
+            "last_run": db.get_setting(conn, "queue_last_run", ""),
+            "last_summary": json.loads(summary_raw) if summary_raw else None,
+            "session_expired": db.get_setting(conn, "airbnb_session_expired", "") == "1",
+        }
+    finally:
+        conn.close()
+
+
+@app.post("/api/queue/run")
+def run_queue(force: bool = False):
+    """Build (or rebuild with ?force=true) today's queue on demand."""
+    return queue_mod.build_queue_for_today(force=force)
+
+
+class QueueEdit(BaseModel):
+    message: str
+
+
+@app.put("/api/queue/{item_id}")
+def edit_queue_item(item_id: int, body: QueueEdit):
+    conn = db.connect()
+    try:
+        row = conn.execute("SELECT * FROM daily_queue WHERE id = ?", (item_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Queue item not found")
+        conn.execute("UPDATE daily_queue SET message = ? WHERE id = ?", (body.message, item_id))
+        conn.commit()
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+@app.post("/api/queue/{item_id}/send")
+def send_queue_item(item_id: int, body: QueueEdit):
+    """THE human gate: this endpoint is only reached by the dashboard Send
+    button. It submits the (possibly edited) message into the Airbnb thread."""
+    conn = db.connect()
+    try:
+        row = conn.execute(
+            "SELECT q.*, u.name AS unit_name FROM daily_queue q JOIN units u ON u.id = q.unit_id "
+            "WHERE q.id = ?", (item_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Queue item not found")
+        if row["status"] == "needs_setup":
+            raise HTTPException(status_code=400, detail=f"Can't send: {row['error']}")
+        if not body.message.strip():
+            raise HTTPException(status_code=400, detail="Message is empty")
+    finally:
+        conn.close()
+
+    try:
+        from .browser_assist import AirbnbSessionExpired, send_airbnb_message
+    except ImportError:
+        raise HTTPException(status_code=501, detail="Playwright is not installed — run "
+                            "'pip install playwright && playwright install chromium'.")
+
+    conn = db.connect()
+    try:
+        try:
+            detail = send_airbnb_message(row["thread_ref"], body.message)
+        except AirbnbSessionExpired as e:
+            db.set_setting(conn, "airbnb_session_expired", "1")
+            conn.execute("UPDATE daily_queue SET status='failed', error=?, message=? WHERE id=?",
+                         (str(e), body.message, item_id))
+            conn.commit()
+            queue_mod.audit("send_failed", row["unit_name"], row["guest_name"], str(e))
+            raise HTTPException(status_code=502, detail=str(e))
+        except Exception as e:
+            conn.execute("UPDATE daily_queue SET status='failed', error=?, message=? WHERE id=?",
+                         (str(e), body.message, item_id))
+            conn.commit()
+            queue_mod.audit("send_failed", row["unit_name"], row["guest_name"], str(e))
+            raise HTTPException(status_code=502, detail=str(e))
+
+        db.set_setting(conn, "airbnb_session_expired", "")
+        conn.execute("UPDATE daily_queue SET status='sent', error='', message=?, sent_at=? "
+                     "WHERE id=?", (body.message, db.now(), item_id))
+        conn.execute("INSERT INTO sent_greetings (stay_id, content, sent_at) VALUES (?, ?, ?)",
+                     (row["stay_id"], body.message, db.now()))
+        conn.execute("UPDATE stays SET status='sent' WHERE id=?", (row["stay_id"],))
+        conn.commit()
+        queue_mod.audit("sent", row["unit_name"], row["guest_name"], "ok")
+        return {"ok": True, "detail": detail}
+    finally:
+        conn.close()
+
+
+def _start_scheduler():
+    """7:00 AM America/Los_Angeles, every day, inside the FastAPI process.
+    Also catch up on startup if the Mac was asleep at 7 (job is idempotent)."""
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from apscheduler.triggers.cron import CronTrigger
+    except ImportError:
+        print("(!) APScheduler not installed — morning queue job disabled. "
+              "Run: pip install apscheduler")
+        return
+    scheduler = BackgroundScheduler(timezone="America/Los_Angeles")
+    scheduler.add_job(queue_mod.build_queue_for_today, CronTrigger(hour=7, minute=0),
+                      id="morning_queue", replace_existing=True,
+                      misfire_grace_time=6 * 3600)
+    scheduler.start()
+
+    # Startup catch-up: if it's past 7 AM Pacific and today's queue hasn't been
+    # built, build it now in the background.
+    import threading
+    from datetime import datetime as dt
+    try:
+        from zoneinfo import ZoneInfo
+        now_pt = dt.now(ZoneInfo("America/Los_Angeles"))
+    except Exception:
+        now_pt = dt.now()
+    conn = db.connect()
+    try:
+        last_run = db.get_setting(conn, "queue_last_run", "")
+    finally:
+        conn.close()
+    if now_pt.hour >= 7 and not last_run.startswith(date.today().isoformat()):
+        threading.Thread(target=queue_mod.build_queue_for_today, daemon=True).start()
+
+
+@app.on_event("startup")
+def on_startup():
+    _start_scheduler()
 
 
 # ---------------------------------------------------------------------------
