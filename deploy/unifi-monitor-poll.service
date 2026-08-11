@@ -1,0 +1,20 @@
+# One-shot poll, driven by unifi-monitor-poll.timer.
+
+[Unit]
+Description=UniFi network monitor (single poll)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=unifi-monitor
+Group=unifi-monitor
+WorkingDirectory=/opt/unifi-monitor
+Environment=UNIFI_MONITOR_ENV=/etc/unifi-monitor/env
+ExecStart=/usr/bin/python3 -m unifi_monitor.cli poll
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/unifi-monitor

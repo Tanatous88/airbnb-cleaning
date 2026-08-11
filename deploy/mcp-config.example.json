@@ -1,0 +1,40 @@
+{
+  "_comment": [
+    "Part 2 exposed as an MCP server over stdio. Point the OpenClaw gateway",
+    "(or any MCP client) at this. It reads the monitoring database read-only —",
+    "it does not poll, and it cannot execute anything on the network."
+  ],
+  "mcpServers": {
+    "unifi-monitor": {
+      "command": "python3",
+      "args": ["-m", "unifi_monitor.cli", "mcp"],
+      "cwd": "/opt/unifi-monitor",
+      "env": {
+        "UNIFI_DB_PATH": "/var/lib/unifi-monitor/unifi_monitor.db",
+        "UNIFI_ACTIONS_DB": "/var/lib/unifi-monitor/unifi_actions.db",
+        "UNIFI_ALLOW_WRITE_ACTIONS": "false"
+      }
+    }
+  },
+
+  "_windows_variant": {
+    "mcpServers": {
+      "unifi-monitor": {
+        "command": "python.exe",
+        "args": ["-m", "unifi_monitor.cli", "mcp"],
+        "cwd": "C:\\opt\\unifi-monitor",
+        "env": {
+          "UNIFI_DB_PATH": "C:\\ProgramData\\unifi-monitor\\unifi_monitor.db",
+          "UNIFI_ACTIONS_DB": "C:\\ProgramData\\unifi-monitor\\unifi_actions.db",
+          "UNIFI_ALLOW_WRITE_ACTIONS": "false"
+        }
+      }
+    }
+  },
+
+  "_note_on_credentials": [
+    "The gateway side needs no controller credentials at all — only the path",
+    "to the SQLite file. That is the point of the split: a compromised or",
+    "malfunctioning model cannot reach the network, only the record of it."
+  ]
+}

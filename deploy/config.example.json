@@ -1,0 +1,47 @@
+{
+  "_comment": [
+    "Optional overlay for the fiddly bits that are painful in env vars.",
+    "Point UNIFI_MONITOR_CONFIG at this file. It is applied AFTER the",
+    "environment, so anything here wins."
+  ],
+
+  "client_watchlist": ["cow cam", "nvr", "garage-door", "thermostat"],
+  "ignore_list": ["guest-", "chromecast"],
+
+  "thresholds": {
+    "device_offline_warning_s": 300,
+    "device_offline_critical_s": 900,
+    "flap_window_s": 3600,
+    "flap_warning_count": 3,
+    "flap_critical_count": 6,
+    "wan_latency_warning_ms": 120,
+    "port_error_rate_warning": 10
+  },
+
+  "overrides": {
+    "_comment": "Per-device thresholds, keyed by device/client name or MAC.",
+    "cow cam": {
+      "client_offline_warning_s": 180,
+      "client_offline_critical_s": 600,
+      "flap_warning_count": 2
+    },
+    "AP-3": {
+      "device_offline_critical_s": 600
+    },
+    "guest-ap": {
+      "device_offline_warning_s": 1800
+    }
+  },
+
+  "alerts": {
+    "channels": ["slack"],
+    "min_severity": "warning",
+    "resend_cooldown_s": 3600,
+    "notify_on_resolve": true,
+    "max_alerts_per_run": 12
+  },
+
+  "retain_metrics_days": 14,
+  "retain_transitions_days": 90,
+  "retain_issues_days": 365
+}

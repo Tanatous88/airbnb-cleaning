@@ -1,0 +1,33 @@
+# Service mode: one long-lived process that polls on its own interval.
+# Prefer this on Linux; use the .timer pair instead if you would rather have
+# systemd own the schedule.
+#
+#   sudo cp deploy/unifi-monitor.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now unifi-monitor
+#   journalctl -u unifi-monitor -f
+
+[Unit]
+Description=UniFi network monitor (poller)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=unifi-monitor
+Group=unifi-monitor
+WorkingDirectory=/opt/unifi-monitor
+Environment=UNIFI_MONITOR_ENV=/etc/unifi-monitor/env
+ExecStart=/usr/bin/python3 -m unifi_monitor.cli run
+Restart=always
+RestartSec=30
+
+# The poller needs the network, a database directory, and nothing else.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/unifi-monitor
+StateDirectory=unifi-monitor
+
+[Install]
+WantedBy=multi-user.target

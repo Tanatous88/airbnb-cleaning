@@ -1,0 +1,15 @@
+# Cron mode — the simplest deployment, and the one that survives everything.
+# Each run is a single poll that exits; nothing is left running between polls,
+# so a hung process can never cause a silent gap.
+#
+#   crontab -e   (as the account that owns the database)
+
+UNIFI_MONITOR_ENV=/home/monitor/.unifi_monitor/env
+PATH=/usr/local/bin:/usr/bin:/bin
+
+# Poll every 5 minutes. Output goes to the log file; cron mails only on error.
+*/5 * * * * cd /opt/unifi-monitor && /usr/bin/python3 -m unifi_monitor.cli poll >> /var/log/unifi-monitor.log 2>&1
+
+# Retention runs on its own schedule (the poller also prunes every 6h; this is
+# belt and braces for hosts where polls fail for a long stretch).
+17 4 * * * cd /opt/unifi-monitor && /usr/bin/python3 -m unifi_monitor.cli prune >> /var/log/unifi-monitor.log 2>&1

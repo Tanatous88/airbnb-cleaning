@@ -1,0 +1,8 @@
+# Monitoring runtime state — never commit a database or credentials.
+*.db
+*.db-wal
+*.db-shm
+.env
+env
+__pycache__/
+*.pyc

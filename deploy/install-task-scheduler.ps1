@@ -1,0 +1,105 @@
+<#
+.SYNOPSIS
+    Registers the UniFi poller as a Windows Scheduled Task on ai-pc.
+
+.DESCRIPTION
+    Creates a task that runs one poll every N minutes and exits. Nothing stays
+    resident between polls, so a wedged process cannot cause a silent gap; if a
+    single run hangs, Task Scheduler kills it at the execution time limit and
+    the next run still happens on schedule.
+
+    Credentials come from the env file, not from this script or the task
+    definition, so nothing secret lands in the task XML.
+
+.EXAMPLE
+    # From an elevated PowerShell prompt, in the repo root:
+    .\deploy\install-task-scheduler.ps1 -EnvFile C:\ProgramData\unifi-monitor\env
+
+.EXAMPLE
+    # Run as the logged-in user instead of SYSTEM, every 10 minutes:
+    .\deploy\install-task-scheduler.ps1 -IntervalMinutes 10 -RunAsCurrentUser
+#>
+
+[CmdletBinding()]
+param(
+    [string]$TaskName        = "UniFi Network Monitor",
+    [string]$ProjectRoot     = (Split-Path -Parent $PSScriptRoot),
+    [string]$EnvFile         = "C:\ProgramData\unifi-monitor\env",
+    [string]$PythonExe       = "",
+    [int]   $IntervalMinutes = 5,
+    [switch]$RunAsCurrentUser
+)
+
+$ErrorActionPreference = "Stop"
+
+if (-not $PythonExe) {
+    $found = Get-Command python.exe -ErrorAction SilentlyContinue
+    if (-not $found) { throw "python.exe not found on PATH; pass -PythonExe explicitly." }
+    $PythonExe = $found.Source
+}
+if (-not (Test-Path (Join-Path $ProjectRoot "unifi_monitor\cli.py"))) {
+    throw "unifi_monitor package not found under $ProjectRoot"
+}
+if (-not (Test-Path $EnvFile)) {
+    Write-Warning "Env file $EnvFile does not exist yet. Copy unifi_monitor\.env.example there and fill it in before the first run."
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $EnvFile) | Out-Null
+}
+
+# Restrict the env file to Administrators + SYSTEM: it holds the controller password.
+if (Test-Path $EnvFile) {
+    $acl = Get-Acl $EnvFile
+    $acl.SetAccessRuleProtection($true, $false)
+    $acl.Access | ForEach-Object { $acl.RemoveAccessRule($_) | Out-Null }
+    foreach ($who in @("BUILTIN\Administrators", "NT AUTHORITY\SYSTEM")) {
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+            $who, "FullControl", "Allow")))
+    }
+    Set-Acl -Path $EnvFile -AclObject $acl
+    Write-Host "Locked down $EnvFile"
+}
+
+$action = New-ScheduledTaskAction `
+    -Execute $PythonExe `
+    -Argument "-m unifi_monitor.cli poll" `
+    -WorkingDirectory $ProjectRoot
+
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
+    -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes)
+
+$settings = New-ScheduledTaskSettingsSet `
+    -AllowStartIfOnBatteries `
+    -DontStopIfGoingOnBatteries `
+    -StartWhenAvailable `
+    -MultipleInstances IgnoreNew `
+    -ExecutionTimeLimit (New-TimeSpan -Minutes ([Math]::Max(2, $IntervalMinutes - 1))) `
+    -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+
+if ($RunAsCurrentUser) {
+    $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" `
+        -LogonType S4U -RunLevel Limited
+} else {
+    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" `
+        -LogonType ServiceAccount -RunLevel Highest
+}
+
+# The task itself carries only the pointer to the env file, never the secrets.
+$env:UNIFI_MONITOR_ENV = $EnvFile
+[Environment]::SetEnvironmentVariable("UNIFI_MONITOR_ENV", $EnvFile, "Machine")
+
+Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
+    -Settings $settings -Principal $principal -Force `
+    -Description "Polls the UniFi controller and records issues to SQLite. No LLM in the path." | Out-Null
+
+Write-Host ""
+Write-Host "Registered '$TaskName': every $IntervalMinutes minute(s), running:"
+Write-Host "  $PythonExe -m unifi_monitor.cli poll   (cwd $ProjectRoot)"
+Write-Host ""
+Write-Host "Next steps:"
+Write-Host "  1. Fill in $EnvFile (see unifi_monitor\.env.example)"
+Write-Host "  2. Verify the controller is reachable:"
+Write-Host "       python -m unifi_monitor.cli check"
+Write-Host "  3. Force a run and watch it:"
+Write-Host "       Start-ScheduledTask -TaskName '$TaskName'"
+Write-Host "       python -m unifi_monitor.cli status"
+Write-Host ""
+Write-Host "To remove:  Unregister-ScheduledTask -TaskName '$TaskName' -Confirm:`$false"
