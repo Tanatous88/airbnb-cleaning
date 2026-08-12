@@ -38,6 +38,7 @@ if [ $RC -ne 0 ]; then
 fi
 
 if [ -z "$NEW" ]; then
+  rm -f "$MARK.prev"
   echo "No new critical issues."
   exit 0
 fi
