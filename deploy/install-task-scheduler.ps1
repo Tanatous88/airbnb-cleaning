@@ -23,7 +23,7 @@
 [CmdletBinding()]
 param(
     [string]$TaskName        = "UniFi Network Monitor",
-    [string]$ProjectRoot     = (Split-Path -Parent $PSScriptRoot),
+    [string]$ProjectRoot     = "",
     [string]$EnvFile         = "C:\ProgramData\unifi-monitor\env",
     [string]$PythonExe       = "",
     [int]   $IntervalMinutes = 5,
@@ -31,6 +31,15 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# Resolved here, not as a param default: under `powershell -File` the parameter
+# defaults are bound before the script scope exists, so $PSScriptRoot is still
+# empty there and Split-Path fails on it. In the body it is populated.
+if (-not $ProjectRoot) {
+    $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+    if (-not $scriptDir) { throw "Cannot determine the script location; pass -ProjectRoot explicitly." }
+    $ProjectRoot = Split-Path -Parent $scriptDir
+}
 
 if (-not $PythonExe) {
     $found = Get-Command python.exe -ErrorAction SilentlyContinue
