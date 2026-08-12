@@ -133,6 +133,30 @@ def env_list(name: str, default: list[str] | None = None) -> list[str]:
     return [part.strip() for part in raw.split(",") if part.strip()]
 
 
+def _env_value(raw: str) -> str:
+    """Interpret the right-hand side of one ``KEY=VALUE`` env-file line.
+
+    The shipped ``.env.example`` documents settings with trailing comments
+    (``UNIFI_CONTROLLER_TYPE=proxy      # UniFi OS console``), so those have to
+    come off or the value is the comment too.
+
+    Stripping every ``#`` would corrupt passwords, which are allowed to contain
+    one. Standard dotenv rules avoid that: a comment must be preceded by
+    whitespace, and a quoted value is taken verbatim.
+    """
+    value = raw.strip()
+    if value[:1] in ("'", '"'):
+        quote = value[0]
+        end = value.find(quote, 1)
+        if end != -1:
+            return value[1:end]
+        return value[1:]
+    cut = re.search(r"\s#", value)
+    if cut:
+        value = value[: cut.start()]
+    return value.strip()
+
+
 def load_env_file(path: str | None = None) -> str | None:
     """Load ``KEY=VALUE`` lines into the environment.
 
@@ -152,7 +176,7 @@ def load_env_file(path: str | None = None) -> str | None:
                     continue
                 key, _, value = line.partition("=")
                 key = key.strip()
-                value = value.strip().strip("'\"")
+                value = _env_value(value)
                 if key and key not in os.environ:
                     os.environ[key] = value
         return candidate

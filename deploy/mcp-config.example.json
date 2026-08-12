@@ -1,31 +1,68 @@
 {
   "_comment": [
-    "Part 2 exposed as an MCP server over stdio. Point the OpenClaw gateway",
-    "(or any MCP client) at this. It reads the monitoring database read-only —",
-    "it does not poll, and it cannot execute anything on the network."
+    "Part 2 exposed as an MCP server over stdio. It reads the monitoring",
+    "database read-only — it does not poll, and it cannot execute anything on",
+    "the network.",
+    "",
+    "NOTE ON FORMAT: OpenClaw nests servers under `mcp.servers`, NOT the",
+    "`mcpServers` key used by Claude Desktop and most other MCP clients, and it",
+    "keeps them inside its single config file (~/.openclaw/openclaw.json) rather",
+    "than a standalone file. Both shapes are shown below.",
+    "",
+    "Prefer the CLI over hand-editing openclaw.json — it validates the entry and",
+    "probes the server before saving. See _openclaw_cli."
   ],
-  "mcpServers": {
-    "unifi-monitor": {
-      "command": "python3",
-      "args": ["-m", "unifi_monitor.cli", "mcp"],
-      "cwd": "/opt/unifi-monitor",
-      "env": {
-        "UNIFI_DB_PATH": "/var/lib/unifi-monitor/unifi_monitor.db",
-        "UNIFI_ACTIONS_DB": "/var/lib/unifi-monitor/unifi_actions.db",
-        "UNIFI_ALLOW_WRITE_ACTIONS": "false"
+
+  "_openclaw": {
+    "_comment": [
+      "Merge this into ~/.openclaw/openclaw.json. Verified against OpenClaw",
+      "2026.7.1-2 on Windows: `openclaw mcp probe unifi-monitor` reports 11 tools.",
+      "`enabled` is optional and defaults to true; the CLI omits it when adding.",
+      "Use an absolute interpreter path — a gateway-launched process does not",
+      "necessarily inherit the PATH that resolves a bare `python`."
+    ],
+    "mcp": {
+      "servers": {
+        "unifi-monitor": {
+          "command": "C:\\Python311\\python.exe",
+          "args": ["-m", "unifi_monitor.cli", "mcp"],
+          "cwd": "C:\\opt\\unifi-monitor",
+          "env": {
+            "UNIFI_DB_PATH": "C:\\ProgramData\\unifi-monitor\\unifi_monitor.db",
+            "UNIFI_ACTIONS_DB": "C:\\ProgramData\\unifi-monitor\\unifi_actions.db",
+            "UNIFI_ALLOW_WRITE_ACTIONS": "false"
+          }
+        }
       }
     }
   },
 
-  "_windows_variant": {
+  "_openclaw_cli": [
+    "openclaw mcp add unifi-monitor \\",
+    "  --command C:\\Python311\\python.exe \\",
+    "  --arg -m --arg unifi_monitor.cli --arg mcp \\",
+    "  --cwd C:\\opt\\unifi-monitor \\",
+    "  --env UNIFI_DB_PATH=C:\\ProgramData\\unifi-monitor\\unifi_monitor.db \\",
+    "  --env UNIFI_ACTIONS_DB=C:\\ProgramData\\unifi-monitor\\unifi_actions.db \\",
+    "  --env UNIFI_ALLOW_WRITE_ACTIONS=false",
+    "",
+    "openclaw mcp probe unifi-monitor    # confirms 11 tools",
+    "openclaw mcp reload                 # pick up config changes without a restart"
+  ],
+
+  "_generic_mcp_client": {
+    "_comment": [
+      "Claude Desktop and most other MCP clients use this shape in their own",
+      "config file. POSIX paths shown; on Windows use the values above."
+    ],
     "mcpServers": {
       "unifi-monitor": {
-        "command": "python.exe",
+        "command": "python3",
         "args": ["-m", "unifi_monitor.cli", "mcp"],
-        "cwd": "C:\\opt\\unifi-monitor",
+        "cwd": "/opt/unifi-monitor",
         "env": {
-          "UNIFI_DB_PATH": "C:\\ProgramData\\unifi-monitor\\unifi_monitor.db",
-          "UNIFI_ACTIONS_DB": "C:\\ProgramData\\unifi-monitor\\unifi_actions.db",
+          "UNIFI_DB_PATH": "/var/lib/unifi-monitor/unifi_monitor.db",
+          "UNIFI_ACTIONS_DB": "/var/lib/unifi-monitor/unifi_actions.db",
           "UNIFI_ALLOW_WRITE_ACTIONS": "false"
         }
       }
@@ -35,6 +72,9 @@
   "_note_on_credentials": [
     "The gateway side needs no controller credentials at all — only the path",
     "to the SQLite file. That is the point of the split: a compromised or",
-    "malfunctioning model cannot reach the network, only the record of it."
+    "malfunctioning model cannot reach the network, only the record of it.",
+    "",
+    "UNIFI_DB_PATH must be set here rather than left to the env file: the MCP",
+    "server is launched by the gateway, not from a shell."
   ]
 }

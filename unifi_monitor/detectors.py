@@ -491,6 +491,15 @@ class Analyzer:
 
             error_rate = rates.get("rx_errors", 0.0) + rates.get("tx_errors", 0.0)
             drop_rate = rates.get("rx_dropped", 0.0) + rates.get("tx_dropped", 0.0)
+
+            # UDM gateway LAN ports report rx_errors as a verbatim copy of
+            # rx_dropped, so ordinary filtered/flooded frames arrive looking
+            # like physical errors — enough to trip the critical threshold on a
+            # perfectly healthy 1Gb link. When the raw counters are identical,
+            # rx_errors carries no independent information: count it once, as
+            # the drop it actually is.
+            if _mirrors_drop_counter(port):
+                error_rate -= rates.get("rx_errors", 0.0)
             if error_rate >= thresholds.port_error_rate_warning:
                 severity = (
                     "critical" if error_rate >= thresholds.port_error_rate_critical else "warning"
@@ -847,7 +856,17 @@ class Analyzer:
             remote_id = str(alarm.get("_id") or alarm.get("id") or "")
             alarm_ts = to_epoch(alarm.get("time") or alarm.get("datetime")) or ts
             key = str(alarm.get("key") or "alarm")
-            entity_id = normalize_mac(alarm.get("ap") or alarm.get("gw") or alarm.get("sw")) or key
+            entity_id = (
+                normalize_mac(
+                    alarm.get("ap")
+                    or alarm.get("gw")
+                    or alarm.get("sw")
+                    # Network 9+ reports one neutral device slot for APs,
+                    # switches and gateways alike.
+                    or alarm.get("device_mac")
+                )
+                or key
+            )
             entity_name = (
                 alarm.get("ap_name")
                 or alarm.get("gw_name")
@@ -904,12 +923,17 @@ class Analyzer:
                 continue
             event_ts = to_epoch(event.get("time") or event.get("datetime")) or ts
             entity_id = normalize_mac(
-                event.get("ap") or event.get("sw") or event.get("gw") or event.get("user")
+                event.get("ap")
+                or event.get("sw")
+                or event.get("gw")
+                or event.get("device_mac")
+                or event.get("user")
             )
             entity_name = (
                 event.get("ap_name")
                 or event.get("sw_name")
                 or event.get("gw_name")
+                or event.get("device_name")
                 or event.get("hostname")
             )
             if self.db.record_controller_event(
@@ -1009,6 +1033,22 @@ def _wan_samples(
                 "raw": wan,
             }
     return list(samples.values())
+
+
+def _mirrors_drop_counter(port: dict[str, Any]) -> bool:
+    """True when this port's rx_errors is just a copy of rx_dropped.
+
+    Seen on UDM/UDR gateway LAN ports: both counters advance in lockstep and
+    reach ~99% of rx_packets, which no working link could sustain. Exact
+    equality of two independently-maintained multi-million counters does not
+    happen by chance, so it is a safe signal — and it is checked per poll, so a
+    port whose counters diverge is flagged normally from that moment on.
+    """
+    rx_errors = _to_float(port.get("rx_errors"))
+    rx_dropped = _to_float(port.get("rx_dropped"))
+    if rx_errors is None or rx_dropped is None:
+        return False
+    return rx_errors > 0 and rx_errors == rx_dropped
 
 
 def _alarm_severity(key: str, alarm: dict[str, Any]) -> str:

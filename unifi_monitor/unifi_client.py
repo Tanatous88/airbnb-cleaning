@@ -45,6 +45,40 @@ class UniFiUnavailable(UniFiError):
     """Controller unreachable — network down, box rebooting, DNS, timeouts."""
 
 
+class UniFiNotFound(UniFiError):
+    """The endpoint does not exist on this controller version.
+
+    Distinct from a generic error so callers can fall back to a newer API
+    shape instead of pattern-matching an error string.
+    """
+
+
+# UniFi Network 9+ retired the classic ``stat/event`` and ``stat/alarm``
+# endpoints and merged both feeds into one paginated v2 resource. Its severity
+# vocabulary has to come back to the words the detectors reason about.
+#
+# MEDIUM deliberately lands on "info": the MEDIUM rows this controller emits
+# are things like NETWORK_WAN_RESTORED, which are context, not complaints.
+# Mapping them to "warning" would open a controller_alarm issue every time the
+# WAN came *back*.
+_V2_SEVERITY = {
+    "CRITICAL": "critical",
+    "VERY_HIGH": "critical",
+    "HIGH": "warning",
+    "MEDIUM": "info",
+    "LOW": "info",
+    "INFO": "info",
+}
+
+_V2_SUBSYSTEM = {
+    "INTERNET_AND_WAN": "wan",
+    "CLIENT_DEVICES": "wlan",
+    "SECURITY": "security",
+    "NETWORKS": "lan",
+    "DEVICES": "device",
+}
+
+
 class UniFiClient:
     def __init__(self, cfg: ControllerConfig):
         self.cfg = cfg
@@ -52,6 +86,7 @@ class UniFiClient:
         self._csrf: str | None = None
         self._logged_in = False
         self._secrets = cfg.secrets()
+        self._alert_cache: tuple[float, int, list[dict[str, Any]]] | None = None
 
         ctx = ssl.create_default_context()
         if not cfg.verify_ssl:
@@ -78,6 +113,10 @@ class UniFiClient:
     def _api_url(self, path: str) -> str:
         path = path.lstrip("/")
         return f"{self.cfg.base_url}{self._api_prefix}/api/{path}"
+
+    def _v2_url(self, path: str) -> str:
+        path = path.lstrip("/")
+        return f"{self.cfg.base_url}{self._api_prefix}/v2/api/site/{self.cfg.site}/{path}"
 
     # ------------------------------------------------------------- transport
 
@@ -231,7 +270,7 @@ class UniFiClient:
             status, _headers, payload = self._request(method, url, body)
 
         if status == 404:
-            raise UniFiError(f"endpoint not found: {_safe_url(url)}")
+            raise UniFiNotFound(f"endpoint not found: {_safe_url(url)}")
         if status in (401, 403):
             raise UniFiAuthError(f"access denied for {_safe_url(url)} (HTTP {status})")
         if status >= 500:
@@ -267,15 +306,72 @@ class UniFiClient:
         return self._call(self._site_url("stat/health"))
 
     def events(self, within_hours: int = 2, limit: int = 200) -> list[dict[str, Any]]:
-        return self._call(
-            self._site_url("stat/event"),
-            method="POST",
-            body={"_limit": limit, "within": within_hours, "_sort": "-time"},
-        )
+        try:
+            return self._call(
+                self._site_url("stat/event"),
+                method="POST",
+                body={"_limit": limit, "within": within_hours, "_sort": "-time"},
+            )
+        except UniFiNotFound:
+            # Network 9+ — the merged v2 feed. Everything the controller is not
+            # actively complaining about is context, which is what events are.
+            rows = self._v2_alerts(within_hours=within_hours, limit=limit)
+            return [r for r in rows if r.get("severity") == "info"]
 
     def alarms(self, archived: bool = False) -> list[dict[str, Any]]:
         query = urllib.parse.urlencode({"archived": "true" if archived else "false"})
-        return self._call(f"{self._site_url('stat/alarm')}?{query}")
+        try:
+            return self._call(f"{self._site_url('stat/alarm')}?{query}")
+        except UniFiNotFound:
+            # The actionable slice of the same v2 feed. Partitioned, not
+            # overlapping, with events(): controller_events is unique on
+            # (source, remote_id), so one alert must not arrive down both paths.
+            rows = self._v2_alerts()
+            return [
+                r
+                for r in rows
+                if r.get("severity") in ("warning", "critical")
+                and bool(r.get("archived")) == archived
+            ]
+
+    # ------------------------------------------------------- v2 alert feed
+
+    def _v2_alerts(self, within_hours: int = 2, limit: int = 200) -> list[dict[str, Any]]:
+        """Fetch and adapt the v2 alert feed to the classic event/alarm shape.
+
+        Cached briefly because one snapshot asks for events and alarms back to
+        back and they come from the same pages — polling it twice would double
+        the request cost for identical data.
+        """
+        now = time.time()
+        cached = self._alert_cache
+        if cached and now - cached[0] < 30.0 and cached[1] >= within_hours:
+            return cached[2]
+
+        cutoff_ms = (now - within_hours * 3600) * 1000
+        page_size = 500  # the feed's own default; smaller pages are not honoured
+        collected: list[dict[str, Any]] = []
+        for page in range(10):  # hard stop: a busy site emits ~1k rows/hour
+            url = f"{self._v2_url('alert')}?{urllib.parse.urlencode({'pageSize': page_size, 'pageNumber': page})}"
+            self.login()
+            status, _headers, payload = self._request("GET", url)
+            if status != 200 or not isinstance(payload, dict):
+                raise UniFiError(f"unexpected status {status} for {_safe_url(url)}")
+            rows = payload.get("data")
+            if not isinstance(rows, list) or not rows:
+                break
+            collected.extend(r for r in rows if isinstance(r, dict))
+            oldest = rows[-1].get("timestamp") or 0
+            if oldest < cutoff_ms or len(collected) >= limit * 4:
+                break
+            if page + 1 >= (payload.get("total_page_count") or 0):
+                break
+
+        adapted = [
+            _adapt_v2_alert(r) for r in collected if (r.get("timestamp") or 0) >= cutoff_ms
+        ]
+        self._alert_cache = (now, within_hours, adapted)
+        return adapted
 
     def snapshot(self) -> dict[str, Any]:
         """One poll's worth of data.
@@ -319,6 +415,57 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         if code in (301, 302, 303, 307, 308) and "/login" in (newurl or ""):
             return None
         return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _v2_param(params: dict[str, Any], name: str, field: str) -> str | None:
+    entry = params.get(name)
+    if not isinstance(entry, dict):
+        return None
+    value = entry.get(field)
+    return str(value) if value not in (None, "") else None
+
+
+def _adapt_v2_alert(row: dict[str, Any]) -> dict[str, Any]:
+    """Translate one v2 alert into the classic event/alarm field names.
+
+    The detectors read the classic vocabulary. Rather than teach them a second
+    schema, normalise here — the raw row is carried through under ``_v2_raw``
+    so nothing is lost for Part 2.
+    """
+    params = row.get("parameters")
+    params = params if isinstance(params, dict) else {}
+    status = str(row.get("status") or "").upper()
+
+    adapted: dict[str, Any] = {
+        "_id": str(row.get("id") or row.get("external_id") or ""),
+        "time": row.get("timestamp"),
+        "key": str(row.get("event") or row.get("key") or ""),
+        "msg": str(row.get("message") or ""),
+        "severity": _V2_SEVERITY.get(str(row.get("severity") or "").upper(), "info"),
+        "subsystem": _V2_SUBSYSTEM.get(str(row.get("category") or "").upper()),
+        # Classic alarms carry an explicit archived flag; the v2 feed carries a
+        # read/unread-style status instead.
+        "archived": status not in ("", "NEW", "UNREAD"),
+        "_v2_raw": row,
+    }
+
+    device_mac = _v2_param(params, "DEVICE", "id")
+    device_name = _v2_param(params, "DEVICE", "name")
+    client_mac = _v2_param(params, "CLIENT", "id")
+    client_name = _v2_param(params, "CLIENT", "name")
+
+    # A UDM/switch/AP all arrive in the same DEVICE slot, so use the neutral
+    # device_mac field rather than guessing ap/sw/gw and labelling a gateway
+    # an access point.
+    if device_mac and ":" in device_mac:
+        adapted["device_mac"] = device_mac
+    if device_name:
+        adapted["device_name"] = device_name
+    if client_mac and ":" in client_mac:
+        adapted["user"] = client_mac
+    if client_name:
+        adapted["hostname"] = client_name
+    return adapted
 
 
 def _decode(raw: bytes) -> Any:

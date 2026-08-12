@@ -20,18 +20,33 @@ model reading it.
 from __future__ import annotations
 
 import os
+import re
 import statistics
 from collections import Counter
 from datetime import datetime, timezone
 from typing import Any
 
 from .db import Database
-from .util import humanize_bps, humanize_duration, loads, normalize_mac, now
+from .util import humanize_bps, humanize_duration, load_env_file, loads, normalize_mac, now
 
-DEFAULT_DB_PATH = os.environ.get("UNIFI_DB_PATH") or os.path.join(
-    os.environ.get("UNIFI_MONITOR_HOME") or os.path.join(os.path.expanduser("~"), ".unifi_monitor"),
-    "unifi_monitor.db",
-)
+
+def default_db_path() -> str:
+    """Where the monitoring database lives, resolved at call time.
+
+    Deliberately not a module constant: the env file is what carries
+    ``UNIFI_DB_PATH`` on a scheduled or gateway-launched run, and it is loaded
+    after this module is imported. Freezing the value at import time made Part 2
+    look in ``~/.unifi_monitor`` while the poller wrote to the configured path.
+
+    ``load_env_file`` is shared plumbing from ``util`` — reading it here does not
+    make Part 2 depend on the polling path.
+    """
+    load_env_file()
+    return os.environ.get("UNIFI_DB_PATH") or os.path.join(
+        os.environ.get("UNIFI_MONITOR_HOME")
+        or os.path.join(os.path.expanduser("~"), ".unifi_monitor"),
+        "unifi_monitor.db",
+    )
 
 ISSUE_JSON_FIELDS = ("details", "trigger_data")
 
@@ -45,7 +60,7 @@ def open_db(db_path: str | None = None) -> Database:
     Read-only is enforced at the connection level, not by convention: Part 2
     physically cannot corrupt the poller's state.
     """
-    return Database(db_path or DEFAULT_DB_PATH, read_only=True)
+    return Database(db_path or default_db_path(), read_only=True)
 
 
 # --------------------------------------------------------------------- basics
@@ -191,6 +206,17 @@ def get_issue(issue_id: int, db_path: str | None = None) -> dict[str, Any] | Non
         return issue
 
 
+def _flatten_name(value: str) -> str:
+    """Reduce a name to words, so separator style stops mattering.
+
+    ``cow-cam``, ``cow_cam``, ``cow.cam`` and ``Cow Cam`` all flatten to
+    ``cow cam``. CamelCase is split too, since controller clients often arrive
+    as ``CowCam``.
+    """
+    spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", value or "")
+    return re.sub(r"[^a-z0-9]+", " ", spaced.lower()).strip()
+
+
 def find_entity(query: str, db_path: str | None = None, limit: int = 10) -> list[dict[str, Any]]:
     """Resolve a human phrase to monitored entities.
 
@@ -202,6 +228,12 @@ def find_entity(query: str, db_path: str | None = None, limit: int = 10) -> list
     if not needle:
         return []
     mac = normalize_mac(needle)
+    flat_needle = _flatten_name(needle)
+    tokens = [t for t in flat_needle.split(" ") if t]
+    # Controller names are written "cow-cam" / "cow_cam" / "CowCam"; people say
+    # "cow cam". Prefilter on the longest word so the scan stays selective, then
+    # compare separator-insensitively below.
+    anchor = max(tokens, key=len) if tokens else needle
     with open_db(db_path) as db:
         rows = db.query(
             """
@@ -210,13 +242,29 @@ def find_entity(query: str, db_path: str | None = None, limit: int = 10) -> list
               ON s.entity_type=e.entity_type AND s.entity_id=e.entity_id
             WHERE LOWER(e.name) LIKE ? OR LOWER(e.entity_id) LIKE ? OR e.entity_id=?
                OR LOWER(COALESCE(e.meta,'')) LIKE ?
+               OR LOWER(e.name) LIKE ?
             """,
-            (f"%{needle}%", f"%{needle}%", mac or needle, f'%"ip":"{needle}"%'),
+            (
+                f"%{needle}%",
+                f"%{needle}%",
+                mac or needle,
+                f'%"ip":"{needle}"%',
+                f"%{anchor}%",
+            ),
         )
         results = []
         for row in rows:
             name = (row["name"] or "").lower()
-            exact = name == needle or row["entity_id"] == (mac or needle)
+            flat_name = _flatten_name(name)
+            is_mac_hit = row["entity_id"] == (mac or needle)
+            exact = name == needle or flat_name == flat_needle or is_mac_hit
+            if not exact:
+                # The anchor prefilter is deliberately loose; drop rows that do
+                # not actually contain every word the person said.
+                phrase_hit = flat_needle and flat_needle in flat_name
+                token_hit = tokens and all(t in flat_name for t in tokens)
+                if not (phrase_hit or token_hit or needle in name or needle in row["entity_id"]):
+                    continue
             results.append(
                 {
                     "entity_type": row["entity_type"],

@@ -24,12 +24,21 @@ import secrets
 import sqlite3
 from typing import Any, Callable
 
-from .util import LOG, dumps, env_bool, loads, normalize_mac, now
+from .util import LOG, dumps, env_bool, load_env_file, loads, normalize_mac, now
 
-ACTIONS_DB_PATH = os.environ.get("UNIFI_ACTIONS_DB") or os.path.join(
-    os.environ.get("UNIFI_MONITOR_HOME") or os.path.join(os.path.expanduser("~"), ".unifi_monitor"),
-    "unifi_actions.db",
-)
+
+def actions_db_path() -> str:
+    """Where action proposals are logged, resolved at call time.
+
+    Same reason as ``query.default_db_path``: ``UNIFI_ACTIONS_DB`` usually
+    arrives via the env file, which is loaded after import.
+    """
+    load_env_file()
+    return os.environ.get("UNIFI_ACTIONS_DB") or os.path.join(
+        os.environ.get("UNIFI_MONITOR_HOME")
+        or os.path.join(os.path.expanduser("~"), ".unifi_monitor"),
+        "unifi_actions.db",
+    )
 
 # Proposals live in their own file. The monitoring database stays a read-only
 # surface for Part 2, so nothing here can ever interfere with the poller.
@@ -341,7 +350,7 @@ def propose_actions(issue: dict[str, Any], report: dict[str, Any] | None = None)
 # ------------------------------------------------------------ persistence
 
 def _actions_db(path: str | None = None) -> sqlite3.Connection:
-    db_path = path or ACTIONS_DB_PATH
+    db_path = path or actions_db_path()
     parent = os.path.dirname(os.path.abspath(db_path))
     if parent:
         os.makedirs(parent, exist_ok=True)

@@ -19,7 +19,26 @@ from typing import Any
 from .util import humanize_duration, setup_logging
 
 
+def _force_utf8_output() -> None:
+    """Make stdout/stderr able to carry what we actually print.
+
+    Under Task Scheduler on Windows these streams default to a legacy codepage
+    (cp1252) that can encode neither the severity emoji nor a device named with
+    a curly apostrophe. The default behaviour is UnicodeEncodeError mid-alert;
+    ``errors="replace"`` keeps the message.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:  # already replaced by a plain object
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8_output()
     parser = argparse.ArgumentParser(prog="unifi-monitor", description=__doc__)
     parser.add_argument("--config", help="path to JSON config overlay")
     parser.add_argument("--db", help="path to the monitoring database")

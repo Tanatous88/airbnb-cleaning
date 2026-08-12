@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import smtplib
 import ssl
+import sys
 import urllib.error
 import urllib.request
 from email.message import EmailMessage
@@ -25,6 +26,20 @@ from .util import LOG, dumps, humanize_duration, now, redact
 
 SEVERITY_EMOJI = {"info": "ℹ️", "warning": "⚠️", "critical": "🚨"}
 SEVERITY_COLOR = {"info": "#5b9bd5", "warning": "#f2b705", "critical": "#d93025"}
+
+
+def _print_safe(text: str) -> None:
+    """Print an alert even if the console cannot encode every character.
+
+    A cp1252 console raises UnicodeEncodeError on the severity emoji, which
+    would turn a decoration into a lost alert. The text always gets out; only
+    the undisplayable characters degrade.
+    """
+    try:
+        print(text, flush=True)
+    except UnicodeEncodeError:
+        encoding = getattr(sys.stdout, "encoding", None) or "ascii"
+        print(text.encode(encoding, "replace").decode(encoding, "replace"), flush=True)
 
 
 class Notifier:
@@ -73,7 +88,7 @@ class Notifier:
 
     def _send_one(self, channel: str, change: IssueChange, text: str) -> str:
         if channel == "stdout":
-            print(text, flush=True)
+            _print_safe(text)
             return "printed"
         if channel == "slack":
             return self._slack(change, text)

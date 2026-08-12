@@ -5,6 +5,8 @@ Run: python -m unittest discover -s tests -v
 
 from __future__ import annotations
 
+import contextlib
+import io
 import os
 import sys
 import tempfile
@@ -12,15 +14,18 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 from unifi_monitor import query, remediation  # noqa: E402
 from unifi_monitor.config import Config  # noqa: E402
 from unifi_monitor.db import Database  # noqa: E402
 from unifi_monitor.detectors import Analyzer  # noqa: E402
 from unifi_monitor.issues import IssueStore  # noqa: E402
-from unifi_monitor.notify import Notifier, format_alert  # noqa: E402
+from unifi_monitor.notify import Notifier, _print_safe, format_alert  # noqa: E402
 from unifi_monitor.poller import Poller  # noqa: E402
-from unifi_monitor.unifi_client import UniFiUnavailable, _unwrap  # noqa: E402
-from unifi_monitor.util import now  # noqa: E402
+from unifi_monitor.query import _flatten_name  # noqa: E402
+from unifi_monitor.unifi_client import UniFiUnavailable, _adapt_v2_alert, _unwrap  # noqa: E402
+from unifi_monitor.util import load_env_file, now  # noqa: E402
 
 BASE_TS = now() - 86400
 
@@ -822,6 +827,241 @@ class TestUnifiClientParsing(unittest.TestCase):
     def test_unwrap_bare_list_and_empty(self):
         self.assertEqual([{"a": 1}], _unwrap([{"a": 1}], "/x"))
         self.assertEqual([], _unwrap(None, "/x"))
+
+
+class TestEnvFileParsing(unittest.TestCase):
+    """The shipped .env.example documents settings with trailing comments, so
+    the loader has to agree with the file it ships."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = os.path.join(self.tmp.name, "env")
+        self._saved = dict(os.environ)
+
+    def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self._saved)
+        self.tmp.cleanup()
+
+    def _load(self, text):
+        with open(self.path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        for key in ("UNIFI_CONTROLLER_TYPE", "UNIFI_PASSWORD", "UNIFI_HOST", "UNIFI_SITE"):
+            os.environ.pop(key, None)
+        load_env_file(self.path)
+
+    def test_inline_comment_is_stripped(self):
+        self._load("UNIFI_CONTROLLER_TYPE=proxy      # UniFi OS console\n")
+        self.assertEqual("proxy", os.environ["UNIFI_CONTROLLER_TYPE"])
+
+    def test_hash_inside_a_password_survives(self):
+        # No whitespace before the '#', so it is part of the value, not a comment.
+        self._load("UNIFI_PASSWORD=pa#ssw0rd\n")
+        self.assertEqual("pa#ssw0rd", os.environ["UNIFI_PASSWORD"])
+
+    def test_quoted_value_keeps_its_spaces_and_hash(self):
+        self._load('UNIFI_PASSWORD="a b # c"   # trailing note\n')
+        self.assertEqual("a b # c", os.environ["UNIFI_PASSWORD"])
+
+    def test_full_line_comment_and_blank_lines_ignored(self):
+        self._load("# a comment\n\nUNIFI_HOST=192.168.1.1\n")
+        self.assertEqual("192.168.1.1", os.environ["UNIFI_HOST"])
+        self.assertNotIn("# a comment", os.environ)
+
+    def test_shipped_example_file_parses_into_a_valid_controller_type(self):
+        example = os.path.join(ROOT, "unifi_monitor", ".env.example")
+        with open(example, encoding="utf-8") as fh:
+            text = fh.read()
+        self._load(text)
+        self.assertEqual("proxy", os.environ["UNIFI_CONTROLLER_TYPE"])
+
+
+class TestV2AlertFeed(unittest.TestCase):
+    """Network 9+ dropped stat/event and stat/alarm for a merged v2 feed."""
+
+    def _alert(self, event="CLIENT_CONNECTED_WIRELESS", severity="LOW", category="CLIENT_DEVICES"):
+        return {
+            "id": "abc123",
+            "event": event,
+            "key": event + "_2",
+            "category": category,
+            "severity": severity,
+            "status": "NEW",
+            "timestamp": BASE_TS * 1000,
+            "message": "something happened",
+            "parameters": {
+                "DEVICE": {"id": "f4:e2:c6:f2:33:31", "name": "Dream Machine"},
+                "CLIENT": {"id": "11:22:33:44:55:66", "name": "cow-cam"},
+            },
+        }
+
+    def test_adapter_maps_classic_field_names(self):
+        out = _adapt_v2_alert(self._alert())
+        self.assertEqual("abc123", out["_id"])
+        self.assertEqual("CLIENT_CONNECTED_WIRELESS", out["key"])
+        self.assertEqual("something happened", out["msg"])
+        self.assertEqual(BASE_TS * 1000, out["time"])
+        self.assertEqual("f4:e2:c6:f2:33:31", out["device_mac"])
+        self.assertEqual("Dream Machine", out["device_name"])
+        self.assertEqual("11:22:33:44:55:66", out["user"])
+        self.assertFalse(out["archived"])
+
+    def test_severity_vocabulary_is_translated(self):
+        self.assertEqual("critical", _adapt_v2_alert(self._alert(severity="VERY_HIGH"))["severity"])
+        self.assertEqual("warning", _adapt_v2_alert(self._alert(severity="HIGH"))["severity"])
+        self.assertEqual("info", _adapt_v2_alert(self._alert(severity="LOW"))["severity"])
+
+    def test_wan_restored_does_not_become_an_alarm(self):
+        # MEDIUM maps to info on purpose: the WAN coming *back* is context.
+        row = self._alert(
+            event="NETWORK_WAN_RESTORED", severity="MEDIUM", category="INTERNET_AND_WAN"
+        )
+        out = _adapt_v2_alert(row)
+        self.assertEqual("info", out["severity"])
+        self.assertEqual("wan", out["subsystem"])
+
+    def test_archived_reflects_non_new_status(self):
+        row = self._alert()
+        row["status"] = "ARCHIVED"
+        self.assertTrue(_adapt_v2_alert(row)["archived"])
+
+    def test_detectors_read_the_neutral_device_slot(self):
+        """A UDM arrives in one DEVICE slot, not ap/sw/gw."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        db = Database(os.path.join(tmp.name, "t.db"))
+        self.addCleanup(db.close)
+        cfg = Config()
+        analyzer = Analyzer(db, cfg)
+        alarm = _adapt_v2_alert(
+            self._alert(event="DEVICE_LOST_CONTACT", severity="VERY_HIGH", category="DEVICES")
+        )
+        snap = snapshot(alarms=[alarm])
+        result = analyzer.analyze(snap, ts=BASE_TS)
+        alarms = [o for o in result.observations if o.issue_type == "controller_alarm"]
+        self.assertEqual(1, len(alarms))
+        self.assertEqual("f4:e2:c6:f2:33:31", alarms[0].entity_id)
+        self.assertEqual("Dream Machine", alarms[0].entity_name)
+        self.assertEqual("critical", alarms[0].severity)
+
+
+class TestMirroredPortErrorCounters(Harness):
+    """UDM gateway LAN ports copy rx_dropped into rx_errors."""
+
+    def _gw_port(self, errors, dropped):
+        port = {
+            "port_idx": 5,
+            "name": "Port 5",
+            "up": True,
+            "speed": 1000,
+            "full_duplex": True,
+            "rx_errors": errors,
+            "tx_errors": 0,
+            "rx_dropped": dropped,
+            "tx_dropped": 0,
+        }
+        return device(mac="aa:bb:cc:dd:ee:77", name="UDM", dev_type="ugw", ports=[port])
+
+    def test_mirrored_counter_is_not_reported_as_errors(self):
+        self.cycle(snapshot([self._gw_port(0, 0)]), BASE_TS)
+        # Identical counters: normal filtered frames, not 1200 physical errors.
+        result, _ = self.cycle(snapshot([self._gw_port(1200, 1200)]), BASE_TS + 60)
+        errs = [o for o in result.observations if o.issue_type == "port_errors"]
+        self.assertEqual(1, len(errs))
+        self.assertIn("dropping", errs[0].summary)
+        self.assertEqual("warning", errs[0].severity)
+        self.assertAlmostEqual(0.0, errs[0].details.get("errors_per_min", 0.0), places=1)
+
+    def test_genuinely_diverging_counters_still_flag_errors(self):
+        self.cycle(snapshot([self._gw_port(0, 0)]), BASE_TS)
+        result, _ = self.cycle(snapshot([self._gw_port(1200, 50)]), BASE_TS + 60)
+        errs = [o for o in result.observations if o.issue_type == "port_errors"]
+        self.assertEqual(1, len(errs))
+        self.assertEqual("critical", errs[0].severity)
+        self.assertAlmostEqual(1200.0, errs[0].details["errors_per_min"], places=1)
+
+
+class TestAlertEncoding(unittest.TestCase):
+    def test_stdout_alert_survives_a_console_that_cannot_encode_emoji(self):
+        """A cp1252 console must not turn a decoration into a lost alert."""
+
+        class Cp1252Stream(io.StringIO):
+            encoding = "cp1252"
+
+            def write(self, text):
+                text.encode("cp1252")  # raises UnicodeEncodeError on the emoji
+                return super().write(text)
+
+        stream = Cp1252Stream()
+        with contextlib.redirect_stdout(stream):
+            _print_safe("\U0001f6a8 CRITICAL: AP-3 offline 12m")
+        self.assertIn("CRITICAL: AP-3 offline 12m", stream.getvalue())
+
+
+class TestPart2PathResolution(unittest.TestCase):
+    """Part 2 must honour UNIFI_DB_PATH from the env file, which is loaded
+    after import — so the path cannot be frozen in a module constant."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self._saved = dict(os.environ)
+
+    def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self._saved)
+        self.tmp.cleanup()
+
+    def test_db_path_follows_a_later_env_change(self):
+        os.environ["UNIFI_DB_PATH"] = os.path.join(self.tmp.name, "one.db")
+        self.assertTrue(query.default_db_path().endswith("one.db"))
+        os.environ["UNIFI_DB_PATH"] = os.path.join(self.tmp.name, "two.db")
+        self.assertTrue(query.default_db_path().endswith("two.db"))
+
+    def test_actions_db_path_follows_a_later_env_change(self):
+        os.environ["UNIFI_ACTIONS_DB"] = os.path.join(self.tmp.name, "a.db")
+        self.assertTrue(remediation.actions_db_path().endswith("a.db"))
+        os.environ["UNIFI_ACTIONS_DB"] = os.path.join(self.tmp.name, "b.db")
+        self.assertTrue(remediation.actions_db_path().endswith("b.db"))
+
+
+class TestEntityPhraseResolution(Harness):
+    """People say "cow cam"; the controller stores "cow-cam"."""
+
+    def _seed(self):
+        for mac, name in (
+            ("11:22:33:44:55:66", "cow-cam"),
+            ("11:22:33:44:55:77", "chicken-cam"),
+            ("11:22:33:44:55:88", "CowFeederCam"),
+            ("11:22:33:44:55:99", "guest-laptop"),
+        ):
+            self.db.upsert_entity("client", mac, name=name, kind="wireless client", ts=BASE_TS)
+
+    def test_spaces_match_a_hyphenated_name(self):
+        self._seed()
+        hits = query.find_entity("cow cam", db_path=self.db_path)
+        self.assertTrue(hits)
+        self.assertEqual("cow-cam", hits[0]["name"])
+
+    def test_camelcase_name_is_reachable_by_words(self):
+        self._seed()
+        hits = query.find_entity("cow feeder cam", db_path=self.db_path)
+        self.assertTrue(hits)
+        self.assertEqual("CowFeederCam", hits[0]["name"])
+
+    def test_unrelated_entities_are_not_returned(self):
+        self._seed()
+        names = {h["name"] for h in query.find_entity("cow cam", db_path=self.db_path)}
+        self.assertNotIn("guest-laptop", names)
+        self.assertNotIn("chicken-cam", names)
+
+    def test_exact_name_still_wins(self):
+        self._seed()
+        hits = query.find_entity("chicken-cam", db_path=self.db_path)
+        self.assertEqual("chicken-cam", hits[0]["name"])
+
+    def test_flatten_handles_separator_styles(self):
+        for raw in ("cow-cam", "cow_cam", "cow.cam", "Cow Cam", "CowCam"):
+            self.assertEqual("cow cam", _flatten_name(raw))
 
 
 if __name__ == "__main__":

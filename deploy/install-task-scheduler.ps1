@@ -45,7 +45,9 @@ if (-not (Test-Path $EnvFile)) {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $EnvFile) | Out-Null
 }
 
-# Restrict the env file to Administrators + SYSTEM: it holds the controller password.
+# Restrict the env file: it holds the controller password. The account the task
+# actually runs as has to keep read access, or every poll fails to authenticate
+# with credentials it cannot see.
 if (Test-Path $EnvFile) {
     $acl = Get-Acl $EnvFile
     $acl.SetAccessRuleProtection($true, $false)
@@ -54,8 +56,25 @@ if (Test-Path $EnvFile) {
         $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
             $who, "FullControl", "Allow")))
     }
-    Set-Acl -Path $EnvFile -AclObject $acl
-    Write-Host "Locked down $EnvFile"
+    if ($RunAsCurrentUser) {
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+            "$env:USERDOMAIN\$env:USERNAME", "Modify", "Allow")))
+    }
+    try {
+        Set-Acl -Path $EnvFile -AclObject $acl -ErrorAction Stop
+        Write-Host "Locked down $EnvFile"
+    } catch {
+        # Set-Acl wants SeSecurityPrivilege, which an unelevated shell lacks.
+        # icacls achieves the same DACL for a file the caller owns.
+        $grants = @("/grant:r", "BUILTIN\Administrators:F", "/grant:r", "NT AUTHORITY\SYSTEM:F")
+        if ($RunAsCurrentUser) { $grants += @("/grant:r", "${env:USERNAME}:M") }
+        & icacls $EnvFile /inheritance:r @grants | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Locked down $EnvFile (via icacls)"
+        } else {
+            Write-Warning "Could not restrict $EnvFile - it holds the controller password. Fix its permissions by hand."
+        }
+    }
 }
 
 $action = New-ScheduledTaskAction `
@@ -83,12 +102,45 @@ if ($RunAsCurrentUser) {
 }
 
 # The task itself carries only the pointer to the env file, never the secrets.
+# Machine scope needs elevation; fall back to the user's own environment, which
+# is the right scope anyway for a task running as that user.
 $env:UNIFI_MONITOR_ENV = $EnvFile
-[Environment]::SetEnvironmentVariable("UNIFI_MONITOR_ENV", $EnvFile, "Machine")
+$scope = if ($RunAsCurrentUser) { "User" } else { "Machine" }
+try {
+    [Environment]::SetEnvironmentVariable("UNIFI_MONITOR_ENV", $EnvFile, $scope)
+} catch {
+    [Environment]::SetEnvironmentVariable("UNIFI_MONITOR_ENV", $EnvFile, "User")
+    Write-Warning "Could not set UNIFI_MONITOR_ENV at $scope scope; set it for the current user instead."
+}
 
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
-    -Settings $settings -Principal $principal -Force `
-    -Description "Polls the UniFi controller and records issues to SQLite. No LLM in the path." | Out-Null
+$description = "Polls the UniFi controller and records issues to SQLite. No LLM in the path."
+$registered = $false
+try {
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
+        -Settings $settings -Principal $principal -Force `
+        -Description $description -ErrorAction Stop | Out-Null
+    $registered = $true
+} catch {
+    # S4U ("run whether or not the user is logged on") needs elevation, and so
+    # does registering as SYSTEM. Interactive works from an ordinary shell.
+    if ($RunAsCurrentUser) {
+        Write-Warning "S4U registration was denied ($($_.Exception.Message.Trim())). Retrying with an Interactive principal."
+        $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" `
+            -LogonType Interactive -RunLevel Limited
+        Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
+            -Settings $settings -Principal $principal -Force `
+            -Description $description -ErrorAction Stop | Out-Null
+        $registered = $true
+        Write-Warning "Registered with LogonType=Interactive: polls run only while $env:USERNAME is logged on. Re-run this script from an elevated prompt for an S4U task that polls regardless."
+    } else {
+        throw
+    }
+}
+
+# Never claim success on a task that is not actually there.
+if (-not $registered -or -not (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue)) {
+    throw "Task '$TaskName' was not registered."
+}
 
 Write-Host ""
 Write-Host "Registered '$TaskName': every $IntervalMinutes minute(s), running:"

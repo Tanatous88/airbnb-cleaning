@@ -47,8 +47,20 @@ Stdlib only. No pip install, no virtualenv, nothing to break at 3am.
 | Active clients | `stat/sta` | who is connected, signal, throughput |
 | Known clients | `rest/user` | names, and detecting a watched client that has *stopped* being connected |
 | Subsystem health | `stat/health` | WAN/WWW status, latency, ISP, WAN IP |
-| Events | `stat/event` | context for Part 2 to correlate against |
-| Alarms | `stat/alarm` | controller's own complaints |
+| Events | `stat/event`, or v2 `alert` | context for Part 2 to correlate against |
+| Alarms | `stat/alarm`, or v2 `alert` | controller's own complaints |
+
+On Network 9+ (verified on 10.5.67 / UDM Pro SE) `stat/event` and `stat/alarm`
+are gone — both 404. The two feeds were merged into one paginated resource,
+`GET /proxy/network/v2/api/site/<site>/alert`. The client tries the classic
+endpoints first and falls back automatically, translating the v2 rows into the
+classic field names, so the detectors only ever see one vocabulary. The
+fallback partitions that single feed: rows the controller rates HIGH or above
+become alarms, the rest become events. Nothing arrives down both paths, because
+`controller_events` is unique on `(source, remote_id)`.
+
+Its `pageSize`/`pageNumber` parameters work; `category`, `severity`, `type` and
+`status` are accepted and then ignored, so filtering has to happen client-side.
 
 Devices and health are load-bearing; the rest degrade independently. If the
 events endpoint fails, the poll still records device state — and issue types
@@ -159,6 +171,24 @@ python3 -m unifi_monitor.cli mcp        # stdio JSON-RPC, zero dependencies
 ```
 
 See `deploy/mcp-config.example.json`. Eleven tools:
+
+**OpenClaw does not use the `mcpServers` key.** It keeps servers under
+`mcp.servers` inside its own config file (`~/.openclaw/openclaw.json`), so the
+generic snippet most MCP docs give you will silently do nothing. Register it
+with the CLI, which validates and probes before saving:
+
+```bash
+openclaw mcp add unifi-monitor --command C:\Python311\python.exe \
+  --arg -m --arg unifi_monitor.cli --arg mcp \
+  --cwd C:\opt\unifi-monitor \
+  --env UNIFI_DB_PATH=C:\ProgramData\unifi-monitor\unifi_monitor.db \
+  --env UNIFI_ACTIONS_DB=C:\ProgramData\unifi-monitor\unifi_actions.db \
+  --env UNIFI_ALLOW_WRITE_ACTIONS=false
+openclaw mcp probe unifi-monitor   # -> unifi-monitor: 11 tools
+```
+
+`UNIFI_DB_PATH` has to be in the server's `env` block. The gateway launches the
+MCP server directly, so there is no shell to source an env file from.
 
 | Tool | Answers |
 |---|---|
@@ -275,11 +305,13 @@ six hours.
 python3 -m unittest discover -s tests -v
 ```
 
-49 tests, no network, no controller. They drive the detectors through a fake
+69 tests, no network, no controller. They drive the detectors through a fake
 controller: threshold crossing and escalation, automatic resolution, rolling
 window flap detection, counter resets, PoE port loss, WAN failover, watchlist
 behaviour, alert cooldown/escalation rules, credential scrubbing, the read-only
-guarantee, the remediation guards, and the MCP protocol handlers.
+guarantee, the remediation guards, and the MCP protocol handlers — plus the
+env-file parser, the v2 alert translation, the mirrored port-counter rule,
+alert encoding on a legacy console, and phrase-to-entity resolution.
 
 ---
 
@@ -296,3 +328,16 @@ guarantee, the remediation guards, and the MCP protocol handlers.
   setups get the aggregate `wan` subsystem, which is enough for up/down and
   latency but cannot distinguish a failover.
 - Everything is UTC, including the hour-of-day clustering in Part 2's output.
+- UDM gateway LAN ports report `rx_errors` as a verbatim copy of `rx_dropped`,
+  so ordinary filtered frames look like physical errors — enough to trip the
+  critical threshold on a healthy link. When the two raw counters are exactly
+  equal the error counter is treated as the mirror it is and the traffic is
+  counted once, as drops. A port whose counters diverge is flagged normally
+  from that poll on.
+- The v2 alert feed is site-wide and busy (~1k rows/hour here), and it cannot
+  be filtered server-side, so the fallback pages through it and stops at the
+  requested window rather than reading all of it.
+- On Windows, stdout and stderr are forced to UTF-8 with `errors="replace"`.
+  Task Scheduler hands the process a cp1252 console, which cannot encode the
+  severity emoji; without this an alert raises `UnicodeEncodeError` instead of
+  being delivered.
