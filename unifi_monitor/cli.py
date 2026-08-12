@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from typing import Any
 
@@ -59,6 +60,16 @@ def main(argv: list[str] | None = None) -> int:
     p_issues.add_argument("--entity")
     p_issues.add_argument("--hours", type=int)
     p_issues.add_argument("--limit", type=int, default=25)
+
+    p_critical = sub.add_parser(
+        "critical", help="[part 2] criticals opened since a watermark (proactive hook)"
+    )
+    p_critical.add_argument(
+        "--minutes", type=int, default=30, help="window used when there is no watermark yet"
+    )
+    p_critical.add_argument(
+        "--since-file", help="watermark file; advanced past whatever is reported"
+    )
 
     p_explain = sub.add_parser("explain", help="[part 2] full evidence package for an issue")
     p_explain.add_argument("issue_id", type=int)
@@ -256,6 +267,57 @@ def cmd_issues(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_critical(args: argparse.Namespace) -> int:
+    """Critical issues opened since a watermark — the proactive hook.
+
+    Meant to be run on a short interval by something that notifies. Prints
+    nothing when there is nothing new, so a scheduler can treat any output as
+    "say something".
+    """
+    from .query import new_critical_issues
+
+    since = _read_watermark(args.since_file)
+    rows = new_critical_issues(since_ts=since, minutes=args.minutes, db_path=args.db)
+
+    if rows and args.since_file:
+        # Advance only past what was actually reported, and only when there was
+        # something to report: a quiet hour must not skip an issue that lands
+        # between the query and the write.
+        _write_watermark(args.since_file, max(int(r["first_seen"]) for r in rows) + 1)
+
+    lines = [
+        f"{r['severity'].upper()}: {r['summary']} (issue #{r['id']}, {r['entity_name'] or r['entity_id']})"
+        for r in rows
+    ]
+    if args.json:
+        _emit(args, rows, lines)
+    elif lines:
+        print("\n".join(lines))
+    return 0
+
+
+def _read_watermark(path: str | None) -> int | None:
+    if not path or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return int(fh.read().strip())
+    except (ValueError, OSError):
+        # A corrupt watermark must not wedge the alert path — fall back to the
+        # --minutes window rather than exiting.
+        return None
+
+
+def _write_watermark(path: str, value: int) -> None:
+    parent = os.path.dirname(os.path.abspath(path))
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(str(value))
+    os.replace(tmp, path)  # atomic: a crash mid-write cannot truncate the mark
+
+
 def cmd_explain(args: argparse.Namespace) -> int:
     from .query import explain_issue, summarize_for_llm
 
@@ -387,6 +449,7 @@ HANDLERS = {
     "prune": cmd_prune,
     "status": cmd_status,
     "issues": cmd_issues,
+    "critical": cmd_critical,
     "explain": cmd_explain,
     "ask": cmd_ask,
     "history": cmd_history,

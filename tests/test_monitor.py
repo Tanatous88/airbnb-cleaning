@@ -5,6 +5,7 @@ Run: python -m unittest discover -s tests -v
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import io
 import os
@@ -17,10 +18,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 from unifi_monitor import query, remediation  # noqa: E402
+from unifi_monitor.cli import cmd_critical  # noqa: E402
 from unifi_monitor.config import Config  # noqa: E402
 from unifi_monitor.db import Database  # noqa: E402
 from unifi_monitor.detectors import Analyzer  # noqa: E402
-from unifi_monitor.issues import IssueStore  # noqa: E402
+from unifi_monitor.issues import IssueStore, Observation  # noqa: E402
 from unifi_monitor.notify import Notifier, _print_safe, format_alert  # noqa: E402
 from unifi_monitor.poller import Poller  # noqa: E402
 from unifi_monitor.query import _flatten_name  # noqa: E402
@@ -1062,6 +1064,101 @@ class TestEntityPhraseResolution(Harness):
     def test_flatten_handles_separator_styles(self):
         for raw in ("cow-cam", "cow_cam", "cow.cam", "Cow Cam", "CowCam"):
             self.assertEqual("cow cam", _flatten_name(raw))
+
+
+class TestCriticalWatermark(Harness):
+    """The proactive hook must report a critical once, not once per run."""
+
+    def setUp(self):
+        super().setUp()
+        self.mark = os.path.join(self.tmp.name, "last_critical")
+
+    def _args(self, **over):
+        ns = argparse.Namespace(
+            db=self.db_path, since_file=self.mark, minutes=60, json=False, command="critical"
+        )
+        for k, v in over.items():
+            setattr(ns, k, v)
+        return ns
+
+    def _open_critical(self, ts, mac="aa:bb:cc:dd:ee:01", name="AP-3"):
+        obs = [
+            Observation(
+                issue_type="device_offline",
+                severity="critical",
+                entity_type="device",
+                entity_id=mac,
+                entity_name=name,
+                summary=f"{name} offline",
+                details={},
+                trigger_data={},
+            )
+        ]
+        self.issues.sync(obs, active_types={"device_offline"}, ts=ts)
+
+    def _run(self, **over):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = cmd_critical(self._args(**over))
+        return rc, buf.getvalue()
+
+    def test_reports_once_then_stays_quiet(self):
+        self._open_critical(now() - 300)
+        rc, first = self._run()
+        self.assertEqual(0, rc)
+        self.assertIn("AP-3 offline", first)
+        # Same issue, second run: the watermark has moved past it.
+        _rc, second = self._run()
+        self.assertEqual("", second.strip())
+
+    def test_a_later_critical_still_gets_through(self):
+        self._open_critical(now() - 600)
+        self._run()
+        self._open_critical(now() - 60, mac="aa:bb:cc:dd:ee:09", name="AP-9")
+        _rc, out = self._run()
+        self.assertIn("AP-9 offline", out)
+
+    def _mark(self):
+        with open(self.mark, encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_watermark_is_not_advanced_when_nothing_is_reported(self):
+        self._open_critical(now() - 300)
+        self._run()
+        mark_after_report = self._mark()
+        self._run()  # quiet run
+        self.assertEqual(mark_after_report, self._mark())
+
+    def test_corrupt_watermark_falls_back_instead_of_crashing(self):
+        """A wedged alert path is worse than a duplicate alert."""
+        self._open_critical(now() - 300)
+        with open(self.mark, "w", encoding="utf-8") as fh:
+            fh.write("not-a-number")
+        rc, out = self._run()
+        self.assertEqual(0, rc)
+        self.assertIn("AP-3 offline", out)
+
+    def test_missing_watermark_uses_the_minutes_window(self):
+        self._open_critical(now() - 120)
+        _rc, out = self._run(minutes=10)
+        self.assertIn("AP-3 offline", out)
+
+    def test_warnings_are_never_reported_as_critical(self):
+        obs = [
+            Observation(
+                issue_type="device_high_memory",
+                severity="warning",
+                entity_type="device",
+                entity_id="aa:bb:cc:dd:ee:02",
+                entity_name="AP-4",
+                summary="AP-4 memory at 92%",
+                details={},
+                trigger_data={},
+            )
+        ]
+        self.issues.sync(obs, active_types={"device_high_memory"}, ts=now() - 300)
+        _rc, out = self._run()
+        self.assertEqual("", out.strip())
 
 
 if __name__ == "__main__":

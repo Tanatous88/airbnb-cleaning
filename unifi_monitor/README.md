@@ -220,6 +220,32 @@ print(query.summarize_for_llm(report))       # compact text for a chat reply
 query.new_critical_issues(minutes=30)        # poll this for proactive nudges
 ```
 
+### The proactive path, without a model in it
+
+`cli critical` is `new_critical_issues` with a watermark, and it prints nothing
+when nothing is new — so a scheduler can treat *any* output as "say something":
+
+```bash
+python3 -m unifi_monitor.cli critical --since-file /var/lib/unifi-monitor/last_critical
+```
+
+The watermark advances only past what was actually reported, and only when
+something was reported, so a quiet hour cannot skip an issue that lands between
+the query and the write. A corrupt watermark falls back to `--minutes` rather
+than exiting: a wedged alert path is worse than a duplicate alert.
+
+On ai-pc this is driven by an OpenClaw **command** cron every 5 minutes
+(`deploy/openclaw-cron.md`), which runs a shell script that mails anything new.
+`payload.kind` is `command`, not an agent turn, and delivery is `none` — the
+script does its own notifying. No model is involved unless a human asks a
+question afterwards, which is the whole point of the split.
+
+Note what this does *not* catch: `new_critical_issues` filters on
+`first_seen`, so an issue that opened as a warning and later **escalated** to
+critical will not appear — its `first_seen` is older than any watermark you are
+likely to hold. Escalations are visible in `issue_events` (`kind='escalated'`)
+if you want them too.
+
 ### What `explain_issue` returns
 
 Facts, assembled — never a diagnosis. The model does the reasoning.
