@@ -436,6 +436,7 @@ class StayUpdate(BaseModel):
     status: Optional[str] = None
     draft_greeting: Optional[str] = None
     confirmation_code: Optional[str] = None
+    phone_last4: Optional[str] = None
 
 
 VALID_STATUSES = ("pending", "drafted", "reviewed", "sent")
@@ -494,7 +495,7 @@ def update_stay(stay_id: int, body: StayUpdate):
         get_stay_or_404(conn, stay_id)
         fields, values = [], []
         for col in ("guest_name", "booking_message", "guest_messages", "draft_greeting",
-                    "confirmation_code"):
+                    "confirmation_code", "phone_last4"):
             val = getattr(body, col)
             if val is not None:
                 fields.append(f"{col} = ?")

@@ -134,7 +134,8 @@ function renderQueueCard(q) {
     </div>
     ${q.error ? `<p class="small" style="color:var(--red);margin:6px 0">${esc(q.error)}</p>` : ""}
     ${q.status === "needs_setup"
-      ? `<p class="muted small">Fix the setup above, then click Rebuild queue now.</p>`
+      ? `<p class="muted small">Fix it (door code / guest name live on the stay; Wi-Fi on the unit's Amenities), then click Rebuild queue now.</p>
+         <button class="secondary" onclick="openStay(${q.stay_id})">Open stay →</button>`
       : `<textarea id="q-msg-${q.id}" class="tall" ${editable ? "" : "readonly"}>${esc(q.message)}</textarea>
          <div class="row" style="margin-top:8px">
            ${q.status === "sent"
@@ -495,6 +496,12 @@ async function openStay(stayId) {
   <p class="muted small">${esc(s.checkin_date)} → ${esc(s.checkout_date)}${s.confirmation_code ? " · " + esc(s.confirmation_code) : ""}</p>
 
   <div class="card">
+    <div class="grid2">
+      <div><label>Door code / guest phone last 4 (auto-filled from the Airbnb calendar feed when available)</label>
+        <input id="stay-phone4" value="${esc(s.phone_last4 || "")}" placeholder="e.g. 7412" maxlength="8"></div>
+      <div><label>Airbnb confirmation code</label>
+        <input id="stay-conf" value="${esc(s.confirmation_code || "")}" placeholder="HMABCDEFGH"></div>
+    </div>
     <h3>Booking message from guest</h3>
     <textarea id="stay-booking-msg">${esc(s.booking_message || "")}</textarea>
     <h3>Guest messages during the stay <span class="muted small">(paste here — used for the review generator)</span></h3>
@@ -586,7 +593,8 @@ async function saveStayMsgs(stayId, btn) {
   busy(btn, true);
   try {
     await api(`/api/stays/${stayId}`, { method: "PUT", body: {
-      booking_message: $("#stay-booking-msg").value, guest_messages: $("#stay-guest-msgs").value } });
+      booking_message: $("#stay-booking-msg").value, guest_messages: $("#stay-guest-msgs").value,
+      phone_last4: $("#stay-phone4").value.trim(), confirmation_code: $("#stay-conf").value.trim() } });
     toast("Saved ✓");
   } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
 }
