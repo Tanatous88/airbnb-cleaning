@@ -11,7 +11,7 @@ We are so excited to host you at The Studio! We've filled this lower-level 2-bed
 - The driveway is a bit tricky while being redone — please park in one of the spots at the top of the driveway, or feel free to park along the street. Take extra care along the pathway and newly redesigned stairs leading to the entrance.
 
 🔑 Keyless Check-In
-- Airbnb auto-assigns your entry code (typically the last 4 digits of your phone number). The door and weather seals are brand new — please pull or push the door firmly shut when locking so the electronic bolt slides fully into place. Any trouble, just message us!
+- Your entry code is the last 4 digits of your phone number — for your stay that's {{door_code}}. The door and weather seals are brand new — please pull or push the door firmly shut when locking so the electronic bolt slides fully into place. Any trouble, just message us!
 
 📶 Wi-Fi & Entertainment
 - Wi-Fi Network: {{wifi_network}} | Password: {{wifi_password}}
