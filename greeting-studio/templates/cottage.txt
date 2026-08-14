@@ -8,11 +8,11 @@ We are so excited to host you at The Cottage! This restored 1930s Pioneer Hill h
 - Address: 510 SE High St, Pullman, WA 99163
 
 🚗 Parking
-- Parking is via the shared driveway to the left of the cottage. Please be sure to park to the right so you don't block our neighbor, who sometimes parks straight back from the street.
+- Parking is via the shared driveway to the left of the cottage — follow it back and park behind the cottage. Please keep to the right so you don't block our neighbor, who sometimes parks straight back from the street.
 
 🔑 Keyless Check-In
 - Check-in is anytime after {{checkin_time}}.
-- Please enter through the BACK door — that's where the smart lock is. Your unique access code is the last 4 digits of the cell phone number on your Airbnb account — for your stay that's {{door_code}}.
+- Your entrance is the BACK door with the smart lock — just steps from where you park. Your unique access code is the last 4 digits of the cell phone number on your Airbnb account — for your stay that's {{door_code}}.
 - A note on the front door: it's the cottage's original 1930s door — full of historic charm, but tricky to lock and unlock, so the back door is the best way in and out. Any trouble unlocking, please reach out and we'll be happy to assist!
 
 📶 Wi-Fi & Entertainment
