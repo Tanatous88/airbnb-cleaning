@@ -12,7 +12,8 @@ We are so excited to host you at The Cottage! This restored 1930s Pioneer Hill h
 
 🔑 Keyless Check-In
 - Check-in is anytime after {{checkin_time}}.
-- Your unique access code is the last 4 digits of the cell phone number on your Airbnb account — for your stay that's {{door_code}}. Any trouble unlocking, please reach out and we'll be happy to assist!
+- Please enter through the BACK door — that's where the smart lock is. Your unique access code is the last 4 digits of the cell phone number on your Airbnb account — for your stay that's {{door_code}}.
+- A note on the front door: it's the cottage's original 1930s door — full of historic charm, but tricky to lock and unlock, so the back door is the best way in and out. Any trouble unlocking, please reach out and we'll be happy to assist!
 
 📶 Wi-Fi & Entertainment
 - Wi-Fi Network: {{wifi_network}} | Password: {{wifi_password}}
