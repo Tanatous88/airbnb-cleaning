@@ -45,6 +45,8 @@ CORE_ITEMS = [
     {"key": "entry", "label": "Keyless check-in",
      "keywords": ["door code", "entry code", "access code", "keyless", "smart lock", "keypad", "unlock"],
      "merge_fields": []},
+    {"key": "checkin_time", "label": "Check-in time",
+     "keywords": ["check-in is", "check in is"], "merge_fields": ["checkin_time"]},
     {"key": "wifi", "label": "Wi-Fi",
      "keywords": ["wifi", "wi-fi"], "merge_fields": ["wifi_network", "wifi_password"]},
     {"key": "rules", "label": "Property rules & etiquette",
@@ -103,6 +105,7 @@ def main() -> None:
 
         db.set_setting(conn, "core_items", json.dumps(CORE_ITEMS, indent=2))
         db.set_setting(conn, "host_signature", HOST_SIGNATURE)
+        db.set_setting(conn, "default_checkin_time", "3:00 PM")
         conn.commit()
         print("✓ Audit checklist updated to harmonized structure "
               "(greeting, address, parking, keyless, Wi-Fi, rules, arrival-time ask, contact)")

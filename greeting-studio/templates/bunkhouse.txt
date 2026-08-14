@@ -6,12 +6,13 @@ We are so excited to host you at The Bunkhouse! Because the Bunkhouse and our si
 
 📍 Address & Arrival Instructions
 - Address: 1303 Old Wawawai Rd, Pullman, WA 99163
-- Directions: Turn off Old Wawawai Rd onto our long driveway. Please drive slowly past our neighbors' house (on your left). As you approach our back lot, you'll see our main house. The Bunkhouse (classic, hotel-style exterior) is located just to the right of our main garage.
+- Directions: Turn off Old Wawawai Rd onto our long driveway. Please drive slowly past our neighbors' house on your right as you come in (it's numbered 1301, for reference). As you approach our back lot, you'll see our main house. The Bunkhouse (classic, hotel-style exterior) is located just to the right of our main garage.
 
 🚗 Parking
 - You're welcome to park directly in front of the Bunkhouse under the covered carport on the concrete pad. Alternatively, park to the side of the main house — just kindly leave room for us to pull out of the garage.
 
 🔑 Keyless Check-In
+- Check-in is anytime after {{checkin_time}}.
 - Your unique door code will be sent via the Airbnb app on the morning of check-in. Any trouble unlocking, reach out right away — we're on the property and happy to help!
 
 📶 Wi-Fi & Entertainment

@@ -11,6 +11,7 @@ We are so excited to host you at The Cottage! This restored 1930s Pioneer Hill h
 - Parking is via the shared driveway to the left of the cottage. Please be sure to park to the right so you don't block our neighbor, who sometimes parks straight back from the street.
 
 🔑 Keyless Check-In
+- Check-in is anytime after {{checkin_time}}.
 - Your unique access code is the last 4 digits of the cell phone number on your Airbnb account — for your stay that's {{door_code}}. Any trouble unlocking, please reach out and we'll be happy to assist!
 
 📶 Wi-Fi & Entertainment

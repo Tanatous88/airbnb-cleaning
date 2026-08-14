@@ -6,13 +6,14 @@ We are so excited to host you at The Garage! Because The Garage and our sibling 
 
 📍 Address & Arrival Instructions
 - Address: 1303 Old Wawawai Rd, Pullman, WA 99163
-- Directions: Turn off Old Wawawai Rd onto our long driveway. Drive slowly past our neighbors' house (on your left). As you approach our back lot, The Garage will be on your right (look for a large dumpster and a red AIR sign near the building).
+- Directions: Turn off Old Wawawai Rd onto our long driveway. Drive slowly past our neighbors' house on your right as you come in (it's numbered 1301, for reference). As you approach our back lot, The Garage will be on your right (look for a large dumpster and a red AIR sign near the building).
 
 🚗 Parking & EV Charging
 - Park on the concrete pad under the overhang by the red AIR sign (where the EV charger is located), or directly in front of the dumpster.
 - ⚠️ Wednesday Trash Pick-Up: If your stay includes a Wednesday daytime, please park under the carport or far to the right next to the workshop — the trash truck needs a clear path to the dumpster (they'll skip us if blocked!).
 
 🔑 Keyless Check-In
+- Check-in is anytime after {{checkin_time}}.
 - Your unique entry code will be sent via the Airbnb app on the morning of check-in. Any trouble unlocking, just give us a shout — we're on the property and happy to help!
 
 📶 Wi-Fi & Entertainment

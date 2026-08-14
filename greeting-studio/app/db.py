@@ -215,7 +215,7 @@ def init_db() -> None:
         "core_items": json.dumps(DEFAULT_CORE_ITEMS, indent=2),
         "host_signature": "— Your hosts",
         "anthropic_model": os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
-        "default_checkin_time": "4:00 PM",
+        "default_checkin_time": "3:00 PM",
         "default_checkout_time": "11:00 AM",
         "hosting_ics_url": "",
         "listing_aliases": json.dumps(DEFAULT_LISTING_ALIASES, indent=2),

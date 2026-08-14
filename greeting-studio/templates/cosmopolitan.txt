@@ -12,6 +12,7 @@ We are so excited to host you at The Cosmopolitan! Your unit is on the middle fl
 - Our single-car driveway is first come, first served — unless a guest has an EV, in which case they get priority so they can charge. If the driveway is taken, there's plenty of street parking available nearby.
 
 🔑 Keyless Check-In
+- Check-in is anytime after {{checkin_time}}.
 - Door Lock: Eufy Smart Lock. Your access code is the last 4 digits of the cell phone number on your Airbnb account — for your stay that's {{door_code}}.
 - To lock when leaving: press and hold the Lock icon on the keypad.
 
