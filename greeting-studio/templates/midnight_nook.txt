@@ -20,6 +20,7 @@ We are so excited to host you at The Midnight Nook! Your unit is on the lower fl
 - Wi-Fi Network: {{wifi_network}} | Password: {{wifi_password}}
 - Plex TV App: Enjoy free movies and TV via the Plex app — log into either of the pre-set "Three Forks" guest profiles.
 - Streaming Services: Feel free to log into your own streaming accounts; just remember to log out before check-out.
+- Coffee: We've added a Keurig for your morning brew — enjoy!
 
 🔥 Climate Control (Fireplace & Mini-Splits)
 - Fireplace: Use the remote on the mantle to toggle flames and heat.

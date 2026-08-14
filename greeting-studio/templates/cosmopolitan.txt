@@ -20,7 +20,7 @@ We are so excited to host you at The Cosmopolitan! Your unit is on the middle fl
 - Wi-Fi Network: {{wifi_network}} | Password: {{wifi_password}}
 - Plex TV App: Enjoy free movies and TV via the Plex app — log into either of the pre-set "Three Forks" guest profiles.
 - Streaming Services: Feel free to log into your own streaming accounts; just remember to log out before check-out.
-- Primo Beverage Station: Lift the flip-up lid on top of the machine, press the circular silver button to eject the pod loader, insert your pod, push the loader back in until it clicks, and select your cup size. Use the paddle buttons for ice-cold or piping-hot purified water.
+- Coffee: We've added a Keurig for your morning brew — enjoy!
 
 🔥 Climate Control (Fireplace & Mini-Splits)
 - Fireplace: Use the remote on the mantle to toggle flames and heat.
