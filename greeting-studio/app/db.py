@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS daily_queue (
     message TEXT DEFAULT '',
     status TEXT DEFAULT 'ready',          -- ready | needs_setup | sent | failed
     error TEXT DEFAULT '',
+    personalization_source TEXT DEFAULT '',  -- scraped | stored | none
     thread_ref TEXT DEFAULT '',           -- Airbnb confirmation code used for the thread
     created_at TEXT NOT NULL,
     sent_at TEXT DEFAULT ''
@@ -197,6 +198,10 @@ def init_db() -> None:
         pass
     try:
         conn.execute("ALTER TABLE stays ADD COLUMN phone_last4 TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute("ALTER TABLE daily_queue ADD COLUMN personalization_source TEXT DEFAULT ''")
     except sqlite3.OperationalError:
         pass
     # Seed units (idempotent — keyed on airbnb_listing_id)

@@ -123,15 +123,23 @@ async function renderDashboard() {
   main.innerHTML = html;
 }
 
+const PERSONALIZATION_SOURCE = {
+  scraped: { icon: "📖", text: "Personalized from the live Airbnb thread", color: "var(--green)" },
+  stored:  { icon: "📝", text: "Personalized from the stored booking message", color: "var(--muted)" },
+  none:    { icon: "📄", text: "No guest context found — plain template used", color: "var(--muted)" },
+};
+
 function renderQueueCard(q) {
   const badge = { ready: "reviewed", needs_setup: "due", sent: "sent", failed: "due" }[q.status] || "pending";
   const label = { ready: "ready", needs_setup: "needs setup", sent: "sent ✓", failed: "failed" }[q.status] || q.status;
   const editable = q.status !== "sent";
+  const src = PERSONALIZATION_SOURCE[q.personalization_source];
   return `<div class="card">
     <div class="row" style="justify-content:space-between">
       <b>${esc(q.unit_name)} — ${esc(q.guest_name)}</b>
       <span class="badge ${badge}">${label}</span>
     </div>
+    ${src ? `<p class="small" style="color:${src.color};margin:2px 0 6px">${src.icon} ${src.text}</p>` : ""}
     ${q.error ? `<p class="small" style="color:var(--red);margin:6px 0">${esc(q.error)}</p>` : ""}
     ${q.status === "needs_setup"
       ? `<p class="muted small">Fix it (door code / guest name live on the stay; Wi-Fi on the unit's Amenities), then click Rebuild queue now.</p>

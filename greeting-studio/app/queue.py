@@ -244,22 +244,34 @@ def _personalize(conn, unit, stay, template: str, merge_values: dict, thread_con
         return render_local(template, merge_values), f"personalization skipped ({e})"
 
 
-def _read_thread_context(stay) -> str:
+def _read_thread_context(stay):
     """Best-effort: read the guest's messages from the Airbnb thread via the
     persistent Playwright profile (headless). Falls back to the stay's stored
-    booking message on any failure — Airbnb markup changes often."""
-    context = (stay["booking_message"] or "").strip()
+    booking message on any failure — Airbnb markup changes often.
+
+    Returns (context, source, scrape_note):
+      source       — 'scraped' (live thread contributed text), 'stored'
+                      (booking message only), or 'none' (no context at all)
+      scrape_note  — non-empty only when the scrape was attempted and failed,
+                      so a 'stored'/'none' result can say WHY it fell back
+                      (session expired, DOM changed, Playwright missing, ...)
+                      rather than just silently not having live context.
+    """
+    stored = (stay["booking_message"] or "").strip()
     code = (stay["confirmation_code"] or "").strip()
     if not code:
-        return context
+        return stored, ("stored" if stored else "none"), ""
     try:
         from .browser_assist import read_thread_messages
         scraped = read_thread_messages(code)
-        if scraped:
-            context = (context + "\n" if context else "") + "\n".join(scraped)
-    except Exception:
-        pass  # fall back to stored booking message
-    return context
+    except Exception as e:
+        reason = " ".join(str(e).split())[:200]  # one line, no ASCII-art tool output
+        note = f"couldn't read the Airbnb thread ({reason})"
+        return stored, ("stored" if stored else "none"), note
+    if scraped:
+        context = (stored + "\n" if stored else "") + "\n".join(scraped)
+        return context, "scraped", ""
+    return stored, ("stored" if stored else "none"), ""
 
 
 def build_queue_for_today(force: bool = False) -> dict:
@@ -289,6 +301,7 @@ def build_queue_for_today(force: bool = False) -> dict:
             tpl = db.latest_template(conn, unit["id"])
             merge_values = build_merge_values(conn, unit, stay) if unit else {}
 
+            source = ""
             if tpl is None:
                 status, message, error = "needs_setup", "", f"{unit['name']} has no template yet."
             else:
@@ -305,23 +318,25 @@ def build_queue_for_today(force: bool = False) -> dict:
                                         " — fill them in on the unit's Amenities form")
                     error = "; ".join(problems) + ". Then click Rebuild."
                 else:
-                    thread_context = _read_thread_context(stay)
+                    thread_context, source, scrape_note = _read_thread_context(stay)
                     message, note = _personalize(conn, unit, stay, tpl["content"], merge_values,
                                                  thread_context)
-                    status, error = "ready", note
+                    status = "ready"
+                    error = "; ".join(x for x in (scrape_note, note) if x)
 
             if existing:
                 conn.execute(
-                    "UPDATE daily_queue SET message=?, status=?, error=?, thread_ref=?, created_at=? "
-                    "WHERE id=?",
-                    (message, status, error, stay["confirmation_code"] or "", db.now(),
+                    "UPDATE daily_queue SET message=?, status=?, error=?, thread_ref=?, "
+                    "personalization_source=?, created_at=? WHERE id=?",
+                    (message, status, error, stay["confirmation_code"] or "", source, db.now(),
                      existing["id"]))
             else:
                 conn.execute(
                     "INSERT INTO daily_queue (stay_id, unit_id, guest_name, checkin_date, message, "
-                    "status, error, thread_ref, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "status, error, thread_ref, personalization_source, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (stay["id"], stay["unit_id"], stay["guest_name"], today, message, status,
-                     error, stay["confirmation_code"] or "", db.now()))
+                     error, stay["confirmation_code"] or "", source, db.now()))
             summary["queued"] += 1
             if status == "needs_setup":
                 summary["needs_setup"] += 1
