@@ -220,6 +220,12 @@ def init_db() -> None:
         "core_items": json.dumps(DEFAULT_CORE_ITEMS, indent=2),
         "host_signature": "— Your hosts",
         "anthropic_model": os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
+        # Cheaper/faster model for the automated daily draft queue (runs
+        # unattended every morning, indefinitely — this is where API cost
+        # actually accumulates). Template synthesis, bootstrap, audit fixes,
+        # and reviews stay on anthropic_model since those are click-triggered,
+        # infrequent, and quality-sensitive.
+        "queue_model": os.environ.get("ANTHROPIC_QUEUE_MODEL", "claude-haiku-4-5"),
         "default_checkin_time": "3:00 PM",
         "default_checkout_time": "11:00 AM",
         "hosting_ics_url": "",

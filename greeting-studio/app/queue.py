@@ -224,7 +224,7 @@ def _personalize(conn, unit, stay, template: str, merge_values: dict, thread_con
     respond to; otherwise a deterministic local render."""
     if not thread_context.strip():
         return render_local(template, merge_values), ""
-    model = db.get_setting(conn, "anthropic_model", "claude-sonnet-4-6")
+    model = db.get_setting(conn, "queue_model", "claude-haiku-4-5")
     prompt = render_prompt(
         "draft_greeting",
         unit_name=unit["name"],

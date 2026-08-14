@@ -705,8 +705,11 @@ async function renderSettings() {
     <p class="muted small">Key status: ${s.api_key_set ? "✅ configured" : "❌ not set — Claude features will fail"} (loaded from <code>.env</code>; you can also paste one here for this session)</p>
     <div class="grid2">
       <div><label>API key (session override)</label><input id="set-key" type="password" placeholder="sk-ant-..."></div>
-      <div><label>Model</label><input id="set-model" value="${esc(s.anthropic_model)}"></div>
+      <div><label>Model for template building &amp; reviews <span class="muted">(click-triggered, quality matters)</span></label>
+        <input id="set-model" value="${esc(s.anthropic_model)}"></div>
     </div>
+    <label>Model for the automated daily draft queue <span class="muted">(runs unattended every morning — this is where API cost actually accumulates; a cheaper/faster model is the recommended way to cut cost without losing template-quality)</span></label>
+    <input id="set-queue-model" value="${esc(s.queue_model)}" placeholder="claude-haiku-4-5">
   </div>
   <div class="card">
     <h3>Host defaults</h3>
@@ -745,7 +748,8 @@ async function saveSettings(btn) {
     try { aliases = JSON.parse($("#set-aliases").value); }
     catch (e) { throw new Error("Listing aliases JSON is invalid: " + e.message); }
     const body = {
-      anthropic_model: $("#set-model").value, host_signature: $("#set-sig").value,
+      anthropic_model: $("#set-model").value, queue_model: $("#set-queue-model").value,
+      host_signature: $("#set-sig").value,
       default_checkin_time: $("#set-ci").value, default_checkout_time: $("#set-co").value,
       core_items: core, listing_aliases: aliases,
       hosting_ics_url: $("#set-hosting-ics").value.trim() };

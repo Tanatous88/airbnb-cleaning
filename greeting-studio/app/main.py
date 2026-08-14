@@ -918,6 +918,7 @@ def on_startup():
 class SettingsIn(BaseModel):
     host_signature: Optional[str] = None
     anthropic_model: Optional[str] = None
+    queue_model: Optional[str] = None
     default_checkin_time: Optional[str] = None
     default_checkout_time: Optional[str] = None
     core_items: Optional[list] = None
@@ -933,6 +934,7 @@ def get_settings():
         return {
             "host_signature": db.get_setting(conn, "host_signature"),
             "anthropic_model": db.get_setting(conn, "anthropic_model"),
+            "queue_model": db.get_setting(conn, "queue_model", "claude-haiku-4-5"),
             "default_checkin_time": db.get_setting(conn, "default_checkin_time"),
             "default_checkout_time": db.get_setting(conn, "default_checkout_time"),
             "core_items": db.get_core_items(conn),
@@ -949,7 +951,7 @@ def get_settings():
 def update_settings(body: SettingsIn):
     conn = db.connect()
     try:
-        for key in ("host_signature", "anthropic_model", "default_checkin_time",
+        for key in ("host_signature", "anthropic_model", "queue_model", "default_checkin_time",
                     "default_checkout_time", "hosting_ics_url"):
             val = getattr(body, key)
             if val is not None:
