@@ -195,6 +195,10 @@ def init_db() -> None:
         conn.execute("ALTER TABLE units ADD COLUMN ics_url TEXT DEFAULT ''")
     except sqlite3.OperationalError:
         pass
+    try:
+        conn.execute("ALTER TABLE stays ADD COLUMN phone_last4 TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
     # Seed units (idempotent — keyed on airbnb_listing_id)
     for u in SEED_UNITS:
         existing = conn.execute(

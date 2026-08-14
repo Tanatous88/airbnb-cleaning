@@ -11,14 +11,14 @@ We are so excited to host you at The Cottage! This restored 1930s Pioneer Hill h
 - Private off-street parking is available on-site for your convenience.
 
 🔑 Keyless Check-In
-- Your unique access code (typically the last 4 digits of the cell phone number on your Airbnb account) will be sent via the Airbnb app. Any trouble unlocking, please reach out and we'll be happy to assist!
+- Your unique access code is the last 4 digits of the cell phone number on your Airbnb account — for your stay that's {{door_code}}. Any trouble unlocking, please reach out and we'll be happy to assist!
 
 📶 Wi-Fi & Entertainment
 - Wi-Fi Network: {{wifi_network}} | Password: {{wifi_password}}
 - Living & Media Lounges: Enjoy the main upstairs living room or head downstairs to the media lounge and bonus recreation space — both equipped with flat-screen TVs and comfortable seating.
 
 🛏️ Comfort & Amenities Inside
-- Sleep Number Beds: All three bedrooms (1 King, 2 Queens) feature Sleep Number mattresses, each with its own TV. Use the bedside remote to adjust firmness — top slider selects left or right side.
+- Sleep Number Beds: All three bedrooms (1 King, 2 Queens) feature Sleep Number mattresses, each with its own TV. To adjust firmness, use the free Sleep Number app on your phone: turn on Bluetooth, stand within a few feet of the bed, open the app, and follow the on-screen steps to connect — no account needed. Pick the side (left/right), then set your comfort number. Heads up: only one phone can be connected to a bed at a time.
 - Backyard, Porch & Grill: Enjoy the private backyard and porch — gas grill available for your use.
 
 🏡 Property Rules & Etiquette

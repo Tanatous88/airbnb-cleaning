@@ -246,12 +246,14 @@ def parse_ics(text: str) -> list:
         code_m = re.search(r"reservations/details/([A-Z0-9]+)", desc)
         if code_m:
             code = code_m.group(1)
+        phone_m = re.search(r"Phone Number \(Last 4 Digits\):\s*(\d{4})", desc, re.IGNORECASE)
         stays.append({
             "guest_name": guest,
             "checkin_date": checkin,
             "checkout_date": checkout,
             "booking_message": "",
             "confirmation_code": code,
+            "phone_last4": phone_m.group(1) if phone_m else "",
         })
     return stays
 

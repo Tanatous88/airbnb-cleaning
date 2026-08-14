@@ -31,6 +31,12 @@ MERGE_FIELD_RE = re.compile(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}")
 def build_merge_values(conn, unit, stay) -> dict:
     amenities = json.loads(unit["amenities"] or "{}")
     first_name = stay["guest_name"].split()[0] if stay["guest_name"].strip() else "[MISSING]"
+    # Per-stay door code: smart locks on several units use the last 4 digits of
+    # the guest's phone number, which the Airbnb calendar feed provides.
+    try:
+        phone_last4 = (stay["phone_last4"] or "").strip()
+    except (KeyError, IndexError):
+        phone_last4 = ""
 
     def pretty_date(iso):
         try:
@@ -50,7 +56,7 @@ def build_merge_values(conn, unit, stay) -> dict:
                         or db.get_setting(conn, "default_checkin_time", "4:00 PM"),
         "checkout_time": amenities.get("checkout_time")
                          or db.get_setting(conn, "default_checkout_time", "11:00 AM"),
-        "door_code": amenities.get("door_code") or "[MISSING]",
+        "door_code": phone_last4 or amenities.get("door_code") or "[MISSING]",
         "wifi_network": amenities.get("wifi_network") or "[MISSING]",
         "wifi_password": amenities.get("wifi_password") or "[MISSING]",
     }
@@ -126,6 +132,8 @@ def _upsert_stay(conn, unit_id: int, s: dict) -> str:
                 updates.append(f"{col} = ?"); values.append(s[col])
         if code and not row["confirmation_code"]:
             updates.append("confirmation_code = ?"); values.append(code)
+        if s.get("phone_last4") and not (row["phone_last4"] or "").strip():
+            updates.append("phone_last4 = ?"); values.append(s["phone_last4"])
         if s.get("booking_message") and not (row["booking_message"] or "").strip():
             updates.append("booking_message = ?"); values.append(s["booking_message"])
         if updates:
@@ -135,9 +143,9 @@ def _upsert_stay(conn, unit_id: int, s: dict) -> str:
         return "unchanged"
     conn.execute(
         "INSERT INTO stays (unit_id, guest_name, checkin_date, checkout_date, booking_message, "
-        "confirmation_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "confirmation_code, phone_last4, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (unit_id, s["guest_name"], s["checkin_date"], s["checkout_date"],
-         s.get("booking_message", ""), code, db.now()))
+         s.get("booking_message", ""), code, s.get("phone_last4", ""), db.now()))
     return "added"
 
 
