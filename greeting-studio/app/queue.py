@@ -272,6 +272,8 @@ def _looks_like_host_text(text: str, known_host_texts: list) -> bool:
         return False
     for known in known_host_texts:
         known_norm = " ".join(known.split()).lower()
+        if len(known_norm) < 20:
+            continue  # too short/blank to trust — "" is a substring of everything
         if norm in known_norm or known_norm in norm:
             return True
     return False
