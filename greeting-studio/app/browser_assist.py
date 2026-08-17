@@ -87,12 +87,29 @@ def _find_message_box(page, timeout_ms: int = 8_000):
 
 def fill_airbnb_message(confirmation_code: str, text: str, wait_seconds: int = 300) -> str:
     """Legacy assist: open a VISIBLE window, fill the box, never send.
-    Leaves the window open so the host can review and press Send themselves."""
+    Leaves the window open so the host can review and press Send themselves.
+
+    This is also the ONLY chance to log the automation's persistent browser
+    profile into Airbnb for the first time — so if we land on a login page,
+    we must NOT raise/abort here. Doing that used to close the window before
+    the host had any chance to type a password, which silently defeated the
+    entire point of this function."""
     with sync_playwright() as pw:
         context = pw.chromium.launch_persistent_context(PROFILE_DIR, headless=False)
         page = context.pages[0] if context.pages else context.new_page()
         page.goto(_thread_url(confirmation_code), wait_until="domcontentloaded", timeout=60_000)
-        _check_logged_in(page)
+        try:
+            _check_logged_in(page)
+        except AirbnbSessionExpired:
+            detail = ("Landed on an Airbnb login page. Log in in this window now — once you do, "
+                      "the login is saved for next time. This window will stay open for a few "
+                      "minutes so you have time; nothing else happens automatically.")
+            try:
+                page.wait_for_timeout(wait_seconds * 1000)
+            except Exception:
+                pass
+            context.close()
+            return detail
         box, selector = _find_message_box(page)
         if box:
             box.click()
