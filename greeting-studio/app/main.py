@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -995,7 +995,15 @@ def update_settings(body: SettingsIn):
 
 @app.get("/")
 def index():
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+    """Inject a cache-busting version (the asset's own mtime) into the
+    app.js / style.css URLs so a browser refresh always picks up code
+    changes after `git pull` — no more 'did you hard-refresh?' guessing."""
+    html = open(os.path.join(STATIC_DIR, "index.html"), encoding="utf-8").read()
+    js_v = int(os.path.getmtime(os.path.join(STATIC_DIR, "app.js")))
+    css_v = int(os.path.getmtime(os.path.join(STATIC_DIR, "style.css")))
+    html = html.replace('/static/app.js"', f'/static/app.js?v={js_v}"')
+    html = html.replace('/static/style.css"', f'/static/style.css?v={css_v}"')
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
