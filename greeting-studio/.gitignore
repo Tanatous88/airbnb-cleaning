@@ -7,3 +7,4 @@ venv/
 .pw-profile/
 local_values.json
 send_audit.log
+debug_thread_read.png

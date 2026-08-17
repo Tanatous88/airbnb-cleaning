@@ -22,6 +22,12 @@ from playwright.sync_api import sync_playwright
 PROFILE_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".pw-profile"
 )
+# Overwritten on every automated thread read — a ground-truth snapshot of
+# what the page actually looked like, since this code was written without
+# ever being able to load airbnb.com to verify selectors against it.
+DEBUG_SCREENSHOT_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "debug_thread_read.png"
+)
 
 MESSAGE_BOX_SELECTORS = [
     "textarea[placeholder*='message' i]",
@@ -55,9 +61,17 @@ def _thread_url(confirmation_code: str) -> str:
 
 def _check_logged_in(page) -> None:
     url = page.url.lower()
-    if "/login" in url or "/signup" in url or page.query_selector("input[type='password']"):
+    # A password <input> can exist in the DOM (a hidden login modal a modern
+    # SPA preloads) without ever being shown — only a VISIBLE one is real
+    # evidence of a login page. DOM-presence alone was a likely false
+    # positive here, since this selector was never verified against a real
+    # Airbnb page.
+    pw_input = page.query_selector("input[type='password']")
+    pw_visible = bool(pw_input and pw_input.is_visible())
+    if "/login" in url or "/signup" in url or pw_visible:
         raise AirbnbSessionExpired(
-            "Airbnb session expired — open the browser assist once and log in again.")
+            f"Airbnb session expired or blocked — open the browser assist once and log in "
+            f"again. (landed on: {page.url})")
 
 
 def _find_message_box(page, timeout_ms: int = 8_000):
@@ -123,8 +137,12 @@ def read_thread_messages(confirmation_code: str, max_messages: int = 10) -> list
             page = context.pages[0] if context.pages else context.new_page()
             page.goto(_thread_url(confirmation_code), wait_until="domcontentloaded",
                       timeout=45_000)
+            page.wait_for_timeout(3_000)  # let the SPA hydrate BEFORE judging the page
+            try:
+                page.screenshot(path=DEBUG_SCREENSHOT_PATH)
+            except Exception:
+                pass  # diagnostic aid only, never fatal
             _check_logged_in(page)
-            page.wait_for_timeout(3_000)  # let the thread hydrate
             texts = []
             for selector in GUEST_MESSAGE_SELECTORS:
                 for el in page.query_selector_all(selector)[:max_messages * 2]:
