@@ -44,6 +44,33 @@ _SKIP_LINE_PREFIXES = (
     "write a message", "leave a review",
 )
 
+# Verified against real outerHTML pulled from a live thread via DevTools.
+# Airbnb's atomic-CSS class names (atm_*, t1w2lm2f, ...) regenerate on every
+# build/AB-test and are useless as selectors. Three things are NOT
+# generated and ARE stable: the data-testid on the conversation container,
+# the accessible aria-label on each sender button ("Sent by <name> ·
+# <role> at <time>..."), and the view-transition-name style value that
+# marks the actual message-content wrapper. Each message is one child of
+# the message-list container, holding both its header (with the sender
+# button) and its content wrapper.
+_GUEST_MESSAGE_JS = r"""
+() => {
+  const container = document.querySelector('[data-testid="message-list"]');
+  if (!container) return [];
+  const out = [];
+  for (const group of Array.from(container.children)) {
+    const btn = group.querySelector('button[aria-label^="Sent by "]');
+    if (!btn) continue;
+    const label = btn.getAttribute('aria-label') || '';
+    if (!/·\s*(Booker|Guest)\b/i.test(label)) continue;
+    const contentEl = group.querySelector('[style*="message-content"]');
+    const text = contentEl ? contentEl.innerText.trim() : '';
+    if (text) out.push(text);
+  }
+  return out;
+}
+"""
+
 
 def _extract_guest_lines(dialog_text: str) -> list:
     """Parse a message-thread's rendered text into guest-only message lines,
@@ -221,15 +248,23 @@ def read_thread_messages(confirmation_code: str, max_messages: int = 10) -> list
             except Exception:
                 pass  # diagnostic aid only, never fatal
             _check_logged_in(page)
-            dialog = page.query_selector("[role='dialog']")
-            raw_text = (dialog.inner_text() if dialog else page.inner_text("body")) or ""
             texts = []
-            for t in _extract_guest_lines(raw_text):
-                if t not in texts:
-                    texts.append(t)
+            try:
+                for t in (page.evaluate(_GUEST_MESSAGE_JS) or []):
+                    t = (t or "").strip()
+                    if t and t not in texts:
+                        texts.append(t)
+            except Exception:
+                pass  # markup may not match — fall through to weaker methods below
             if not texts:
-                # Fallback in case the header-parsing format didn't match this
-                # layout — try the older class/testid-based guess.
+                # Fallback 1: parse the dialog's rendered text by sender-header line.
+                dialog = page.query_selector("[role='dialog']")
+                raw_text = (dialog.inner_text() if dialog else page.inner_text("body")) or ""
+                for t in _extract_guest_lines(raw_text):
+                    if t not in texts:
+                        texts.append(t)
+            if not texts:
+                # Fallback 2: the older class/testid-based guess.
                 for selector in GUEST_MESSAGE_SELECTORS:
                     for el in page.query_selector_all(selector)[:max_messages * 2]:
                         t = (el.inner_text() or "").strip()
