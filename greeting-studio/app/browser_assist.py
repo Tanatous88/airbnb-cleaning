@@ -9,6 +9,15 @@ the app. Log in manually the first time a window opens.
   send_airbnb_message  — fills the box AND submits; only ever called after the
                          host clicks Send on the dashboard
 
+The reservation-details page (/hosting/reservations/details/<confirmation
+code>) has NO message box or message history on it — it's a summary page
+(dates, guest, "Leave a review," Message/Call buttons). The actual message
+thread lives at a completely separate URL keyed by an internal numeric
+thread id (/hosting/messages/<thread id>), which isn't derivable from the
+confirmation code. So every function here lands on the reservation page
+first, then clicks its "Message" button to reach the real thread, before
+doing anything else.
+
 Airbnb changes its inbox markup periodically, so all of this can break: every
 failure raises with a specific reason (fail loud, never silent), and a login
 redirect raises AirbnbSessionExpired so the dashboard can show a banner.
@@ -28,6 +37,11 @@ PROFILE_DIR = os.path.join(
 DEBUG_SCREENSHOT_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "debug_thread_read.png"
 )
+
+MESSAGE_THREAD_BUTTON_SELECTORS = [
+    "button:has-text('Message')",
+    "a:has-text('Message')",
+]
 
 MESSAGE_BOX_SELECTORS = [
     "textarea[placeholder*='message' i]",
@@ -54,7 +68,7 @@ class AirbnbSessionExpired(Exception):
     """Raised when Airbnb bounces us to a login page."""
 
 
-def _thread_url(confirmation_code: str) -> str:
+def _reservation_url(confirmation_code: str) -> str:
     return (f"https://www.airbnb.com/hosting/reservations/details/{confirmation_code}"
             if confirmation_code else "https://www.airbnb.com/hosting/inbox")
 
@@ -72,6 +86,23 @@ def _check_logged_in(page) -> None:
         raise AirbnbSessionExpired(
             f"Airbnb session expired or blocked — open the browser assist once and log in "
             f"again. (landed on: {page.url})")
+
+
+def _open_reservation(page, confirmation_code: str) -> None:
+    page.goto(_reservation_url(confirmation_code), wait_until="domcontentloaded", timeout=60_000)
+    page.wait_for_timeout(2_000)  # let the SPA hydrate before judging the page
+
+
+def _click_into_message_thread(page) -> bool:
+    """From the reservation page, follow the "Message" button to the real
+    thread. Returns True if a button was found and clicked."""
+    for selector in MESSAGE_THREAD_BUTTON_SELECTORS:
+        btn = page.query_selector(selector)
+        if btn:
+            btn.click()
+            page.wait_for_timeout(2_500)
+            return True
+    return False
 
 
 def _find_message_box(page, timeout_ms: int = 8_000):
@@ -97,13 +128,23 @@ def fill_airbnb_message(confirmation_code: str, text: str, wait_seconds: int = 3
     with sync_playwright() as pw:
         context = pw.chromium.launch_persistent_context(PROFILE_DIR, headless=False)
         page = context.pages[0] if context.pages else context.new_page()
-        page.goto(_thread_url(confirmation_code), wait_until="domcontentloaded", timeout=60_000)
+        _open_reservation(page, confirmation_code)
         try:
             _check_logged_in(page)
         except AirbnbSessionExpired:
             detail = ("Landed on an Airbnb login page. Log in in this window now — once you do, "
                       "the login is saved for next time. This window will stay open for a few "
                       "minutes so you have time; nothing else happens automatically.")
+            try:
+                page.wait_for_timeout(wait_seconds * 1000)
+            except Exception:
+                pass
+            context.close()
+            return detail
+        if not _click_into_message_thread(page):
+            detail = ("Could not find the 'Message' button on the reservation page — Airbnb's "
+                      "markup may have changed. The text is on your clipboard — paste it "
+                      "manually.")
             try:
                 page.wait_for_timeout(wait_seconds * 1000)
             except Exception:
@@ -129,32 +170,17 @@ def fill_airbnb_message(confirmation_code: str, text: str, wait_seconds: int = 3
 
 def read_thread_messages(confirmation_code: str, max_messages: int = 10) -> list:
     """Best-effort scrape of the guest's messages for draft/review personalization.
-
-    Deliberately launches with the EXACT same plain configuration as
-    fill_airbnb_message/send_airbnb_message below (headless=False, no extra
-    flags, no off-screen positioning) — those are the configurations known to
-    actually work against Airbnb. An earlier version of this function tried
-    off-screen positioning plus anti-automation Chromium flags to avoid a
-    visible window during background runs; that made things WORSE, not
-    better — Airbnb bounced it to a real /login redirect. Two plausible
-    reasons, both pointing the same direction: (a) some anti-bot systems
-    specifically flag known evasion tricks as more suspicious, not less, or
-    (b) an off-screen/occluded window gets throttled by Chromium's
-    background-tab power-saving, breaking the page's own login-check timing.
-    Either way: match the known-working shape instead of trying to be clever.
-    This means a browser window can briefly appear during a background run —
-    an accepted tradeoff for it actually working. Returns [] on anything
-    unexpected — the caller falls back to the stay's stored booking
-    message."""
+    Returns [] on anything unexpected — the caller falls back to the stay's
+    stored booking message."""
     if not confirmation_code:
         return []
     with sync_playwright() as pw:
         context = pw.chromium.launch_persistent_context(PROFILE_DIR, headless=False)
         try:
             page = context.pages[0] if context.pages else context.new_page()
-            page.goto(_thread_url(confirmation_code), wait_until="domcontentloaded",
-                      timeout=45_000)
-            page.wait_for_timeout(3_000)  # let the SPA hydrate BEFORE judging the page
+            _open_reservation(page, confirmation_code)
+            _check_logged_in(page)
+            _click_into_message_thread(page)
             try:
                 page.screenshot(path=DEBUG_SCREENSHOT_PATH)
             except Exception:
@@ -185,15 +211,19 @@ def send_airbnb_message(confirmation_code: str, text: str) -> str:
         context = pw.chromium.launch_persistent_context(PROFILE_DIR, headless=False)
         try:
             page = context.pages[0] if context.pages else context.new_page()
-            page.goto(_thread_url(confirmation_code), wait_until="domcontentloaded",
-                      timeout=60_000)
+            _open_reservation(page, confirmation_code)
+            _check_logged_in(page)
+            if not _click_into_message_thread(page):
+                raise RuntimeError(
+                    "Could not find the 'Message' button on the reservation page — Airbnb's "
+                    "markup may have changed. Use the fill-only assist or clipboard instead.")
             _check_logged_in(page)
             box, selector = _find_message_box(page, timeout_ms=15_000)
             if not box:
                 raise RuntimeError(
-                    "Could not find the message box on the reservation page — Airbnb's markup "
-                    "may have changed, or the thread didn't load. Use the fill-only assist or "
-                    "clipboard instead.")
+                    "Could not find the message box on the message thread page — Airbnb's "
+                    "markup may have changed, or the thread didn't load. Use the fill-only "
+                    "assist or clipboard instead.")
             box.click()
             box.fill(text) if selector.startswith("textarea") else box.type(text)
             page.wait_for_timeout(500)
