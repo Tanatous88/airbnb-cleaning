@@ -25,8 +25,43 @@ redirect raises AirbnbSessionExpired so the dashboard can show a banner.
 Requires:  pip install playwright && playwright install chromium
 """
 import os
+import re
 
 from playwright.sync_api import sync_playwright
+
+# Airbnb labels each message bubble with a header line like "Melissa ·
+# Booker 11:31 AM" or "Susan · Co-host 2:45 PM" — confirmed against a real
+# screenshot of the thread modal. That role label ("Booker" = guest,
+# "Co-host"/"Host"/"You" = host side) is far more reliable than guessing at
+# CSS class names, so message text is attributed by parsing these headers
+# rather than by selector alone.
+_SENDER_HEADER_RE = re.compile(
+    r"^(?P<name>.+?)\s*[·•]\s*(?P<role>Booker|Guest|Co-host|Cohost|Host|You)\s+"
+    r"\d{1,2}:\d{2}\s*(AM|PM)?$", re.IGNORECASE)
+_GUEST_ROLES = {"booker", "guest"}
+_SKIP_LINE_PREFIXES = (
+    "read by", "translation on", "translation off", "how was your guest",
+    "write a message", "leave a review",
+)
+
+
+def _extract_guest_lines(dialog_text: str) -> list:
+    """Parse a message-thread's rendered text into guest-only message lines,
+    using the "Name · Role time" header pattern to attribute each line that
+    follows it. Order-preserving, dedupes nothing (caller handles that)."""
+    lines = [l.strip() for l in (dialog_text or "").splitlines() if l.strip()]
+    guest_lines = []
+    current_is_guest = False
+    for line in lines:
+        m = _SENDER_HEADER_RE.match(line)
+        if m:
+            current_is_guest = m.group("role").lower() in _GUEST_ROLES
+            continue
+        if any(line.lower().startswith(p) for p in _SKIP_LINE_PREFIXES):
+            continue
+        if current_is_guest and len(line) > 2:
+            guest_lines.append(line)
+    return guest_lines
 
 PROFILE_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".pw-profile"
@@ -186,14 +221,22 @@ def read_thread_messages(confirmation_code: str, max_messages: int = 10) -> list
             except Exception:
                 pass  # diagnostic aid only, never fatal
             _check_logged_in(page)
+            dialog = page.query_selector("[role='dialog']")
+            raw_text = (dialog.inner_text() if dialog else page.inner_text("body")) or ""
             texts = []
-            for selector in GUEST_MESSAGE_SELECTORS:
-                for el in page.query_selector_all(selector)[:max_messages * 2]:
-                    t = (el.inner_text() or "").strip()
-                    if t and t not in texts and len(t) > 2:
-                        texts.append(t)
-                if texts:
-                    break
+            for t in _extract_guest_lines(raw_text):
+                if t not in texts:
+                    texts.append(t)
+            if not texts:
+                # Fallback in case the header-parsing format didn't match this
+                # layout — try the older class/testid-based guess.
+                for selector in GUEST_MESSAGE_SELECTORS:
+                    for el in page.query_selector_all(selector)[:max_messages * 2]:
+                        t = (el.inner_text() or "").strip()
+                        if t and t not in texts and len(t) > 2:
+                            texts.append(t)
+                    if texts:
+                        break
             return texts[:max_messages]
         finally:
             context.close()
