@@ -619,12 +619,28 @@ function renderReview(r) {
   </div>`;
 }
 
+function renderContextBanner(source, note) {
+  const src = PERSONALIZATION_SOURCE[source];
+  let html = "";
+  if (src) html += `<p class="small" style="color:${src.color};margin:0 0 8px">${src.icon} ${src.text}</p>`;
+  if (note) html += `<p class="small" style="color:var(--red);margin:0 0 8px">${esc(note)}</p>`;
+  return html;
+}
+
 async function genReviews(stayId, btn) {
   busy(btn, true);
   try {
     const r = await api(`/api/stays/${stayId}/reviews`, { method: "POST" });
-    $("#reviews-area").innerHTML = r.variants.map(renderReview).join("");
-    toast("3 review variants ready — edit & copy the one you like ✓");
+    $("#reviews-area").innerHTML = renderContextBanner(r.personalization_source, r.note) +
+      r.variants.map(renderReview).join("");
+    if (r.personalization_source === "scraped") {
+      toast("3 review variants ready, flavored from the live Airbnb thread ✓");
+    } else if (r.personalization_source === "none") {
+      toast("3 review variants ready — no guest messages found, so these are warm but generic. "
+           + "Paste something on the stay page for more flavor.", true);
+    } else {
+      toast("3 review variants ready — edit & copy the one you like ✓");
+    }
   } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
 }
 

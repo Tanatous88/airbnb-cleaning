@@ -244,9 +244,43 @@ def _personalize(conn, unit, stay, template: str, merge_values: dict, thread_con
         return render_local(template, merge_values), f"personalization skipped ({e})"
 
 
-def _read_thread_context(stay):
-    """Best-effort: read the guest's messages from the Airbnb thread via the
-    persistent Playwright profile (headless). Falls back to the stay's stored
+# Section-header emoji used across every harmonized welcome template. A
+# scraped message bubble containing 2+ of these is almost certainly the
+# host's own greeting, not something the guest wrote — the generic thread
+# scraper has no way to tell sender apart from bubble markup alone.
+_HOST_SECTION_MARKERS = ("📍", "🚗", "🔑", "📶", "🛏️", "🔥", "🐄", "🏡", "🍞", "📱")
+
+
+def _known_host_texts(conn, stay) -> list:
+    """Text we know FOR CERTAIN the host sent for this stay — the approved
+    draft and anything logged as actually sent — used to recognize the
+    host's own voice inside a scraped thread."""
+    texts = []
+    if (stay["draft_greeting"] or "").strip():
+        texts.append(stay["draft_greeting"])
+    rows = conn.execute("SELECT content FROM sent_greetings WHERE stay_id = ?",
+                        (stay["id"],)).fetchall()
+    texts.extend(r["content"] for r in rows)
+    return texts
+
+
+def _looks_like_host_text(text: str, known_host_texts: list) -> bool:
+    if sum(1 for m in _HOST_SECTION_MARKERS if m in text) >= 2:
+        return True
+    norm = " ".join(text.split()).lower()
+    if len(norm) < 20:
+        return False
+    for known in known_host_texts:
+        known_norm = " ".join(known.split()).lower()
+        if norm in known_norm or known_norm in norm:
+            return True
+    return False
+
+
+def read_thread_context(conn, stay):
+    """Best-effort: read the GUEST's messages from the Airbnb thread via the
+    persistent Playwright profile (headless), filtering out anything that
+    looks like the host's own sent greeting. Falls back to the stay's stored
     booking message on any failure — Airbnb markup changes often.
 
     Returns (context, source, scrape_note):
@@ -268,6 +302,8 @@ def _read_thread_context(stay):
         reason = " ".join(str(e).split())[:200]  # one line, no ASCII-art tool output
         note = f"couldn't read the Airbnb thread ({reason})"
         return stored, ("stored" if stored else "none"), note
+    known_host_texts = _known_host_texts(conn, stay)
+    scraped = [t for t in scraped if not _looks_like_host_text(t, known_host_texts)]
     if scraped:
         context = (stored + "\n" if stored else "") + "\n".join(scraped)
         return context, "scraped", ""
@@ -318,7 +354,7 @@ def build_queue_for_today(force: bool = False) -> dict:
                                         " — fill them in on the unit's Amenities form")
                     error = "; ".join(problems) + ". Then click Rebuild."
                 else:
-                    thread_context, source, scrape_note = _read_thread_context(stay)
+                    thread_context, source, scrape_note = read_thread_context(conn, stay)
                     message, note = _personalize(conn, unit, stay, tpl["content"], merge_values,
                                                  thread_context)
                     status = "ready"

@@ -14,7 +14,7 @@ from . import audit as audit_mod
 from . import db, parsers
 from . import queue as queue_mod
 from .claude import ClaudeError, ask_claude, render_prompt, set_api_key
-from .queue import build_merge_values
+from .queue import build_merge_values, read_thread_context
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -724,16 +724,31 @@ def generate_reviews(stay_id: int):
     try:
         stay = get_stay_or_404(conn, stay_id)
         unit = get_unit_or_404(conn, stay["unit_id"])
-        # Pull any imported thread messages tagged with this guest, plus pasted notes
-        guest_msgs = [stay["guest_messages"]] if stay["guest_messages"].strip() else []
+        guest_msgs = []
+
+        # Primary source: live Airbnb thread, scraped fresh (host text filtered out)
+        scraped_context, thread_source, scrape_note = read_thread_context(conn, stay)
+        if scraped_context.strip():
+            guest_msgs.append(scraped_context.strip())
+
+        # Legacy: threads manually imported for this guest via the Units import pipeline
         rows = conn.execute(
             "SELECT m.body FROM thread_messages m JOIN imports i ON i.id = m.import_id "
             "WHERE m.unit_id = ? AND m.sender = 'guest' AND i.guest_name != '' "
             "AND lower(i.guest_name) = lower(?) ORDER BY m.id",
             (unit["id"], stay["guest_name"])).fetchall()
-        guest_msgs.extend(r["body"] for r in rows)
-        if stay["booking_message"].strip():
-            guest_msgs.insert(0, f"(booking message) {stay['booking_message']}")
+        for r in rows:
+            if r["body"] not in guest_msgs:
+                guest_msgs.append(r["body"])
+
+        # Anything the host pasted by hand on the stay page
+        extra = (stay["guest_messages"] or "").strip()
+        if extra and extra not in guest_msgs:
+            guest_msgs.append(extra)
+
+        # Report where the flavor actually came from: a real live-thread scrape
+        # beats any fallback, even if other sources also happened to contribute
+        source = "scraped" if thread_source == "scraped" else ("stored" if guest_msgs else "none")
 
         variants = []
         conn.execute("DELETE FROM reviews WHERE stay_id = ?", (stay_id,))
@@ -752,7 +767,7 @@ def generate_reviews(stay_id: int):
                 (stay_id, key, content, db.now()))
             variants.append({"humor_level": key, "content": content})
         conn.commit()
-        return {"variants": variants}
+        return {"variants": variants, "personalization_source": source, "note": scrape_note}
     finally:
         conn.close()
 
