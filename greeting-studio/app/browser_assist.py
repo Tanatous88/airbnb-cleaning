@@ -113,27 +113,27 @@ def fill_airbnb_message(confirmation_code: str, text: str, wait_seconds: int = 3
 def read_thread_messages(confirmation_code: str, max_messages: int = 10) -> list:
     """Best-effort scrape of the guest's messages for draft/review personalization.
 
-    Runs as a normal (non-headless) browser positioned off-screen, not a truly
-    headless one — sites including Airbnb can detect a headless browser and
-    bounce it to a login/verification page even with a fully valid session
-    cookie, purely because it detects headless automation signals. Running
-    headed-but-off-screen avoids that detection without a window actually
-    appearing in front of you. Returns [] on anything unexpected — the
-    caller falls back to the stay's stored booking message."""
+    Deliberately launches with the EXACT same plain configuration as
+    fill_airbnb_message/send_airbnb_message below (headless=False, no extra
+    flags, no off-screen positioning) — those are the configurations known to
+    actually work against Airbnb. An earlier version of this function tried
+    off-screen positioning plus anti-automation Chromium flags to avoid a
+    visible window during background runs; that made things WORSE, not
+    better — Airbnb bounced it to a real /login redirect. Two plausible
+    reasons, both pointing the same direction: (a) some anti-bot systems
+    specifically flag known evasion tricks as more suspicious, not less, or
+    (b) an off-screen/occluded window gets throttled by Chromium's
+    background-tab power-saving, breaking the page's own login-check timing.
+    Either way: match the known-working shape instead of trying to be clever.
+    This means a browser window can briefly appear during a background run —
+    an accepted tradeoff for it actually working. Returns [] on anything
+    unexpected — the caller falls back to the stay's stored booking
+    message."""
     if not confirmation_code:
         return []
     with sync_playwright() as pw:
-        context = pw.chromium.launch_persistent_context(
-            PROFILE_DIR, headless=False,
-            args=[
-                "--window-position=-32000,-32000",
-                "--window-size=1280,900",
-                "--disable-blink-features=AutomationControlled",
-            ],
-        )
+        context = pw.chromium.launch_persistent_context(PROFILE_DIR, headless=False)
         try:
-            context.add_init_script(
-                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
             page = context.pages[0] if context.pages else context.new_page()
             page.goto(_thread_url(confirmation_code), wait_until="domcontentloaded",
                       timeout=45_000)
