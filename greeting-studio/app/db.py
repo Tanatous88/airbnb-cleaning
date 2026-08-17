@@ -204,6 +204,20 @@ def init_db() -> None:
         conn.execute("ALTER TABLE daily_queue ADD COLUMN personalization_source TEXT DEFAULT ''")
     except sqlite3.OperationalError:
         pass
+    # Hard safety net: a confirmation code identifies one real reservation, so
+    # two stay rows must never share one. This is a backstop behind
+    # queue._upsert_stay's own matching logic, in case that logic ever misses
+    # a case again (as it once did, producing duplicate rows for the same
+    # booking). Skipped harmlessly if duplicate codes already exist in the
+    # DB — run dedupe_stays.py to clear those, then this will take effect on
+    # the next startup.
+    try:
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_stays_confirmation_code "
+            "ON stays(confirmation_code) WHERE confirmation_code != ''"
+        )
+    except sqlite3.IntegrityError:
+        pass
     # Seed units (idempotent — keyed on airbnb_listing_id)
     for u in SEED_UNITS:
         existing = conn.execute(

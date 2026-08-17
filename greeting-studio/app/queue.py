@@ -10,6 +10,7 @@ button on the dashboard. Guardrails:
 import json
 import os
 import re
+import sqlite3
 import subprocess
 from datetime import date, datetime, timezone
 
@@ -141,11 +142,33 @@ def _upsert_stay(conn, unit_id: int, s: dict) -> str:
             conn.execute(f"UPDATE stays SET {', '.join(updates)} WHERE id = ?", values)
             return "updated"
         return "unchanged"
-    conn.execute(
-        "INSERT INTO stays (unit_id, guest_name, checkin_date, checkout_date, booking_message, "
-        "confirmation_code, phone_last4, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (unit_id, s["guest_name"], s["checkin_date"], s["checkout_date"],
-         s.get("booking_message", ""), code, s.get("phone_last4", ""), db.now()))
+    try:
+        conn.execute(
+            "INSERT INTO stays (unit_id, guest_name, checkin_date, checkout_date, "
+            "booking_message, confirmation_code, phone_last4, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (unit_id, s["guest_name"], s["checkin_date"], s["checkout_date"],
+             s.get("booking_message", ""), code, s.get("phone_last4", ""), db.now()))
+    except sqlite3.IntegrityError:
+        # The DB's unique-confirmation-code guard caught a case the matching
+        # above missed (same reservation, no match found above for some
+        # reason) — self-heal by updating the row that already holds this
+        # code instead of crashing the whole sync over one stay.
+        row = conn.execute(
+            "SELECT * FROM stays WHERE confirmation_code = ?", (code,)).fetchone()
+        if not row:
+            raise
+        updates, values = [], []
+        if s["guest_name"] != UNKNOWN_GUEST and s["guest_name"] != row["guest_name"]:
+            updates.append("guest_name = ?"); values.append(s["guest_name"])
+        for col in ("checkin_date", "checkout_date"):
+            if s[col] != row[col]:
+                updates.append(f"{col} = ?"); values.append(s[col])
+        if updates:
+            values.append(row["id"])
+            conn.execute(f"UPDATE stays SET {', '.join(updates)} WHERE id = ?", values)
+            return "updated"
+        return "unchanged"
     return "added"
 
 
