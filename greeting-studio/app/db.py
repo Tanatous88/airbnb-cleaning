@@ -218,6 +218,19 @@ def init_db() -> None:
         )
     except sqlite3.IntegrityError:
         pass
+    # Same idea for daily_queue: one row per (stay, day). Multiple queue-build
+    # triggers (the 7 AM cron, the startup catch-up thread, a "Rebuild queue
+    # now" click) can race — each checking "does a row exist yet?" before any
+    # has committed — and without this, each inserts its own row instead of
+    # finding the others. Skipped harmlessly if duplicates already exist; run
+    # dedupe_queue.py to clear those, then this takes effect next startup.
+    try:
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_queue_stay_checkin "
+            "ON daily_queue(stay_id, checkin_date)"
+        )
+    except sqlite3.IntegrityError:
+        pass
     # Seed units (idempotent — keyed on airbnb_listing_id)
     for u in SEED_UNITS:
         existing = conn.execute(

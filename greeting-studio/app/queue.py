@@ -392,12 +392,27 @@ def build_queue_for_today(force: bool = False) -> dict:
                     (message, status, error, stay["confirmation_code"] or "", source, db.now(),
                      existing["id"]))
             else:
-                conn.execute(
-                    "INSERT INTO daily_queue (stay_id, unit_id, guest_name, checkin_date, message, "
-                    "status, error, thread_ref, personalization_source, created_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (stay["id"], stay["unit_id"], stay["guest_name"], today, message, status,
-                     error, stay["confirmation_code"] or "", source, db.now()))
+                try:
+                    conn.execute(
+                        "INSERT INTO daily_queue (stay_id, unit_id, guest_name, checkin_date, "
+                        "message, status, error, thread_ref, personalization_source, created_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (stay["id"], stay["unit_id"], stay["guest_name"], today, message, status,
+                         error, stay["confirmation_code"] or "", source, db.now()))
+                except sqlite3.IntegrityError:
+                    # Another concurrent build won the race and already
+                    # inserted this stay's row — self-heal by updating it
+                    # instead of crashing this build over one stay.
+                    row = conn.execute(
+                        "SELECT id FROM daily_queue WHERE stay_id = ? AND checkin_date = ?",
+                        (stay["id"], today)).fetchone()
+                    if not row:
+                        raise
+                    conn.execute(
+                        "UPDATE daily_queue SET message=?, status=?, error=?, thread_ref=?, "
+                        "personalization_source=?, created_at=? WHERE id=?",
+                        (message, status, error, stay["confirmation_code"] or "", source,
+                         db.now(), row["id"]))
             summary["queued"] += 1
             if status == "needs_setup":
                 summary["needs_setup"] += 1
