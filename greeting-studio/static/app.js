@@ -505,8 +505,12 @@ async function openStay(stayId) {
 
   <div class="card">
     <div class="grid2">
+      <div><label>Guest name (auto-filled when Airbnb's calendar feed includes it)</label>
+        <input id="stay-guest-name" value="${esc(s.guest_name === "Guest (see Airbnb)" ? "" : s.guest_name)}" placeholder="e.g. Jason Luft"></div>
       <div><label>Door code / guest phone last 4 (auto-filled from the Airbnb calendar feed when available)</label>
         <input id="stay-phone4" value="${esc(s.phone_last4 || "")}" placeholder="e.g. 7412" maxlength="8"></div>
+    </div>
+    <div class="grid2">
       <div><label>Airbnb confirmation code</label>
         <input id="stay-conf" value="${esc(s.confirmation_code || "")}" placeholder="HMABCDEFGH"></div>
     </div>
@@ -562,7 +566,15 @@ async function draftGreeting(stayId, btn) {
     const r = await api(`/api/stays/${stayId}/draft`, { method: "POST" });
     $("#draft-area").innerHTML = renderDraftArea({ id: stayId, draft_greeting: r.draft, merge_values: r.merge_values },
       { draft: r.draft, template: r.template, merge_values: r.merge_values });
-    if (r.missing_values.length) toast(`Heads up: missing values → ${r.missing_values.join(", ")}. Fill the unit's amenities.`, true);
+    if (r.missing_values.length) {
+      const amenityFields = r.missing_values.filter(v => v !== "guest_first_name");
+      const parts = [];
+      if (r.missing_values.includes("guest_first_name"))
+        parts.push("guest's name is unknown — fill in the Guest name field above");
+      if (amenityFields.length)
+        parts.push(`${amenityFields.join(", ")} — fill them in on the unit's Amenities form`);
+      toast(`Heads up: ${parts.join("; ")}.`, true);
+    }
     else toast("Draft ready — review it below ✓");
   } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
 }
@@ -600,10 +612,14 @@ async function markSent(stayId, btn) {
 async function saveStayMsgs(stayId, btn) {
   busy(btn, true);
   try {
-    await api(`/api/stays/${stayId}`, { method: "PUT", body: {
+    const body = {
       booking_message: $("#stay-booking-msg").value, guest_messages: $("#stay-guest-msgs").value,
-      phone_last4: $("#stay-phone4").value.trim(), confirmation_code: $("#stay-conf").value.trim() } });
+      phone_last4: $("#stay-phone4").value.trim(), confirmation_code: $("#stay-conf").value.trim() };
+    const name = $("#stay-guest-name").value.trim();
+    if (name) body.guest_name = name;
+    await api(`/api/stays/${stayId}`, { method: "PUT", body });
     toast("Saved ✓");
+    openStay(stayId);
   } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
 }
 
