@@ -2,7 +2,8 @@
 # Studio automatically when you log in — no more manually opening
 # PowerShell and running "python run.py" every time.
 #
-# Run this ONCE:
+# Run this ONCE, from an ADMINISTRATOR PowerShell (right-click PowerShell ->
+# "Run as administrator") — registering a scheduled task requires it:
 #   powershell -ExecutionPolicy Bypass -File install_autostart.ps1
 #
 # The app runs hidden in the background from then on (every login), and
@@ -11,6 +12,14 @@
 # console window if something looks wrong.
 #
 # To remove it later, run uninstall_autostart.ps1.
+
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+           ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    Write-Host "This needs to run as Administrator." -ForegroundColor Yellow
+    Write-Host "Right-click PowerShell -> 'Run as administrator', then re-run this script."
+    exit 1
+}
 
 $taskName = "GreetingStudioAutoStart"
 $scriptPath = Join-Path $PSScriptRoot "start_hidden.ps1"
@@ -23,8 +32,14 @@ $trigger = New-ScheduledTaskTrigger -AtLogOn
 $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) `
     -DontStopOnIdleEnd -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings `
-    -Description "Runs Guest Greeting & Review Studio in the background on login." | Out-Null
+try {
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings `
+        -Description "Runs Guest Greeting & Review Studio in the background on login." `
+        -ErrorAction Stop | Out-Null
+} catch {
+    Write-Host "Failed to register the scheduled task: $_" -ForegroundColor Red
+    exit 1
+}
 
 Write-Host "Installed. Starting it now (instead of waiting for the next login)..."
 Start-ScheduledTask -TaskName $taskName
@@ -32,3 +47,4 @@ Start-ScheduledTask -TaskName $taskName
 Start-Sleep -Seconds 3
 Write-Host "Done. Check http://127.0.0.1:8321 in a browser in a few seconds."
 Write-Host "Logs: $PSScriptRoot\app.log and $PSScriptRoot\app_error.log"
+
