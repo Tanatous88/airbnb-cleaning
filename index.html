@@ -50,7 +50,6 @@ body { font-family: "Instrument Sans", -apple-system, "Segoe UI", Roboto, sans-s
 .unit-name { font-family: "Bricolage Grotesque", sans-serif; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
 .badge { border-radius: 99px; padding: 2px 8px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.03em; }
 .badge.repeat { background: var(--warn-bg); color: var(--warn); }
-.badge.dirty { background: var(--urgent-bg); color: var(--urgent); text-transform: uppercase; letter-spacing: 0.06em; }
 .badge.urgent { background: var(--urgent); color: #fff; text-transform: uppercase; letter-spacing: 0.06em; animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.55; } }
 @media (prefers-reduced-motion: reduce) { .badge.urgent { animation: none; } }
@@ -67,8 +66,6 @@ body { font-family: "Instrument Sans", -apple-system, "Segoe UI", Roboto, sans-s
 .signup-btn:hover { filter: brightness(1.08); }
 .signup-btn:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .signup-btn.urgent-btn { background: var(--urgent); }
-.done-btn { display: block; margin-top: 8px; padding: 11px; border-radius: 10px; text-align: center; text-decoration: none; font-size: 14.5px; font-weight: 700; color: var(--good); background: var(--good-bg); border: 1.5px solid var(--good); transition: filter 0.15s; }
-.done-btn:hover { filter: brightness(1.05); }
 .day-label { font-size: 12px; font-weight: 700; color: var(--faint); margin: 14px 4px 6px; letter-spacing: 0.04em; }
 .board { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 15px 17px; box-shadow: var(--shadow); }
 .board-cap { font-size: 13px; color: var(--muted); }
@@ -98,11 +95,10 @@ body { font-family: "Instrument Sans", -apple-system, "Segoe UI", Roboto, sans-s
 <!-- EVENTS_DATA_START -->
 <script>
 window.CLEANING_DATA = {
-  generatedAt: "Thu Sep 24 2:15am PT",
-  todayISO: "2026-09-24",
-  events: [{"unit":"Cosmo","guest":"Avery Scott","party":"4a","cleaner":"","confirmed":false,"repeat":false,"dateISO":"2026-09-25","stayRange":"Sep 25 - Sep 27","nights":2,"availRange":"Sep 20 - Sep 25","cleanFrom":"2026-09-20"},{"unit":"Fun Music","guest":"Jeff Gray","party":"4a","cleaner":"Michael","confirmed":false,"repeat":true,"dateISO":"2026-09-25","stayRange":"Sep 25 - Sep 27","nights":2,"availRange":"","cleanFrom":"2026-09-20"},{"unit":"Garage Studio","guest":"Alyssa Samuelson","party":"3a","cleaner":"Abigail","confirmed":false,"repeat":false,"dateISO":"2026-09-25","stayRange":"Sep 25 - Sep 27","nights":2,"availRange":"","cleanFrom":"2026-09-20"},{"unit":"Mini Cows","guest":"Jesse Lyon","party":"2a","cleaner":"Abigail","confirmed":false,"repeat":true,"dateISO":"2026-09-25","stayRange":"Sep 25 - Sep 27","nights":2,"availRange":"","cleanFrom":"2026-09-20"},{"unit":"The Cottage","guest":"Kyle's Group","party":"","cleaner":"Michael","confirmed":false,"repeat":false,"dateISO":"2026-09-25","stayRange":"Sep 25 - Sep 27","nights":2,"availRange":"","cleanFrom":"2026-09-20"},{"unit":"Garage Studio","guest":"Mary Molling","party":"2a","cleaner":"","confirmed":false,"repeat":false,"dateISO":"2026-09-28","stayRange":"Sep 28 - Oct 2","nights":4,"availRange":"Sep 27 - Sep 28","cleanFrom":"2026-09-27"},{"unit":"Cosmo","guest":"Blake Snyder","party":"2a","cleaner":"","confirmed":false,"repeat":false,"dateISO":"2026-09-29","stayRange":"Sep 29 - Oct 1","nights":2,"availRange":"Sep 27 - Sep 29","cleanFrom":"2026-09-27"},{"unit":"Mini Cows","guest":"Kelli McNichols","party":"2a 2p","cleaner":"","confirmed":false,"repeat":true,"dateISO":"2026-09-29","stayRange":"Sep 29 - Oct 1","nights":2,"availRange":"Sep 27 - Sep 29","cleanFrom":"2026-09-27"},{"unit":"Cosmo","guest":"Heather Gomez","party":"3a","cleaner":"","confirmed":false,"repeat":false,"dateISO":"2026-10-02","stayRange":"Oct 2 - Oct 5","nights":3,"availRange":"Oct 1 - Oct 2","cleanFrom":"2026-10-01"},{"unit":"Fun Music","guest":"Jolie Cowan","party":"4a","cleaner":"Tabitha","confirmed":false,"repeat":true,"dateISO":"2026-10-02","stayRange":"Oct 2 - Oct 4","nights":2,"availRange":"","cleanFrom":"2026-09-27"},{"unit":"Garage Studio","guest":"Aaron Martin","party":"2a","cleaner":"","confirmed":false,"repeat":true,"dateISO":"2026-10-02","stayRange":"Oct 2 - Oct 4","nights":2,"availRange":"Oct 2 (same-day turnaround)","cleanFrom":"2026-10-02"},{"unit":"Midnight Nook","guest":"Chris Lewis","party":"2a","cleaner":"Tabitha","confirmed":false,"repeat":false,"dateISO":"2026-10-02","stayRange":"Oct 2 - Oct 4","nights":2,"availRange":"","cleanFrom":"2026-08-16"},{"unit":"Mini Cows","guest":"Katrina Walker","party":"1a 1p","cleaner":"","confirmed":false,"repeat":true,"dateISO":"2026-10-02","stayRange":"Oct 2 - Oct 4","nights":2,"availRange":"Oct 1 - Oct 2","cleanFrom":"2026-10-01"},{"unit":"The Cottage","guest":"Silvia Mah","party":"2a","cleaner":"","confirmed":false,"repeat":false,"dateISO":"2026-10-02","stayRange":"Oct 2 - Oct 4","nights":2,"availRange":"Sep 27 - Oct 2","cleanFrom":"2026-09-27"},{"unit":"Cosmo","guest":"Angie DiLoreto","party":"3a","cleaner":"","confirmed":false,"repeat":false,"dateISO":"2026-10-08","stayRange":"Oct 8 - Oct 10","nights":2,"availRange":"Oct 5 - Oct 8","cleanFrom":"2026-10-05"},{"unit":"Garage Studio","guest":"Mari Gehring","party":"2a","cleaner":"","confirmed":false,"repeat":true,"dateISO":"2026-10-09","stayRange":"Oct 9 - Oct 11","nights":2,"availRange":"Oct 4 - Oct 9","cleanFrom":"2026-10-04"},{"unit":"Mini Cows","guest":"Corey Feldon","party":"1a","cleaner":"","confirmed":false,"repeat":false,"dateISO":"2026-10-09","stayRange":"Oct 9 - Oct 11","nights":2,"availRange":"Oct 4 - Oct 9","cleanFrom":"2026-10-04"},{"unit":"The Cottage","guest":"Holly Rasmussen","party":"3a","cleaner":"","confirmed":false,"repeat":false,"dateISO":"2026-10-09","stayRange":"Oct 9 - Oct 11","nights":2,"availRange":"Oct 4 - Oct 9","cleanFrom":"2026-10-04"}],
-  board: [{"name":"Jake","n":6},{"name":"Tabitha","n":4},{"name":"Michael","n":1}],
-  dirty: []
+  generatedAt: "Wed Sep 23 7:20pm PT",
+  todayISO: "2026-09-23",
+  events: [{"unit":"Mini Cows","guest":"Jesse Lyon","party":"2a","cleaner":"Abigail","confirmed":false,"repeat":true,"dateISO":"2026-09-25","stayRange":"Sep 25 - Sep 27","nights":2,"availRange":""},{"unit":"The Cottage","guest":"Kyle's Group","party":"","cleaner":"Michael","confirmed":false,"repeat":false,"dateISO":"2026-09-25","stayRange":"Sep 25 - Sep 27","nights":2,"availRange":""},{"unit":"Fun Music","guest":"Jeff Gray","party":"4a","cleaner":"Michael","confirmed":false,"repeat":true,"dateISO":"2026-09-25","stayRange":"Sep 25 - Sep 27","nights":2,"availRange":""},{"unit":"Garage Studio","guest":"Alyssa Samuelson","party":"3a","cleaner":"Abigail","confirmed":false,"repeat":false,"dateISO":"2026-09-25","stayRange":"Sep 25 - Sep 27","nights":2,"availRange":""},{"unit":"Garage Studio","guest":"Mary Molling","party":"2a","cleaner":"","confirmed":false,"repeat":false,"dateISO":"2026-09-28","stayRange":"Sep 28 - Oct 2","nights":4,"availRange":"Sep 27 - Sep 28"},{"unit":"Mini Cows","guest":"Kelli McNichols","party":"2a 2p","cleaner":"","confirmed":false,"repeat":true,"dateISO":"2026-09-29","stayRange":"Sep 29 - Oct 1","nights":2,"availRange":"Sep 27 - Sep 29"},{"unit":"The Cottage","guest":"Silvia Mah","party":"2a","cleaner":"","confirmed":false,"repeat":false,"dateISO":"2026-10-02","stayRange":"Oct 2 - Oct 4","nights":2,"availRange":"Sep 27 - Oct 2"},{"unit":"Fun Music","guest":"Jolie Cowan","party":"4a","cleaner":"Tabitha","confirmed":false,"repeat":true,"dateISO":"2026-10-02","stayRange":"Oct 2 - Oct 4","nights":2,"availRange":""},{"unit":"Garage Studio","guest":"Aaron Martin","party":"2a","cleaner":"","confirmed":false,"repeat":true,"dateISO":"2026-10-02","stayRange":"Oct 2 - Oct 4","nights":2,"availRange":"Oct 2 (same-day turnaround)"},{"unit":"Midnight Nook","guest":"Chris Lewis","party":"2a","cleaner":"Tabitha","confirmed":false,"repeat":false,"dateISO":"2026-10-02","stayRange":"Oct 2 - Oct 4","nights":2,"availRange":""},{"unit":"Mini Cows","guest":"Katrina Walker","party":"1a 1p","cleaner":"","confirmed":false,"repeat":true,"dateISO":"2026-10-02","stayRange":"Oct 2 - Oct 4","nights":2,"availRange":"Oct 1 - Oct 2"}],
+  board: [{"name":"Jake","n":6},{"name":"Tabitha","n":4},{"name":"Michael","n":1}]
 };
 </script>
 <!-- EVENTS_DATA_END -->
@@ -110,19 +106,12 @@ window.CLEANING_DATA = {
 var FORM_BASE = 'https://docs.google.com/forms/d/e/1FAIpQLSeeZfcvmwMFtXNadTH8kw542rXb0KxQWID0tbShL5nuqZrmXg/viewform';
 var UNIT_ENTRY = 'entry.1764140552';
 var DATE_ENTRY = 'entry.493844947';
-var DONE_URL = 'https://script.google.com/macros/s/AKfycbyEdAWFJSwaIyzsfxIuwX4A19KaicPDNWkG2xo066-1zXQrsG2CQSjQtAmxucHD40pF/exec';
 var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var MONTHS_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var UNIT_VARS = { 'Fun Music': '--u-fun', 'Garage Studio': '--u-garage', 'Midnight Nook': '--u-nook', 'Cosmo': '--u-cosmo', 'Mini Cows': '--u-cows', 'The Cottage': '--u-cottage' };
 
 function signupUrl(unit, dateISO) { return FORM_BASE + '?usp=pp_url&' + UNIT_ENTRY + '=' + encodeURIComponent(unit) + '&' + DATE_ENTRY + '=' + dateISO; }
-function doneUrl(e) { return DONE_URL.indexOf('https://') === 0 ? DONE_URL + '?u=' + encodeURIComponent(e.unit) + '&d=' + e.dateISO + '&n=' + encodeURIComponent(e.cleaner || '') : ''; }
-function doneBtn(e) {
-  if (!e.cleaner || e.confirmed || (e.cleanFrom && e.cleanFrom > window.CLEANING_DATA.todayISO)) return '';
-  var u = doneUrl(e);
-  return u ? '<a class="done-btn" href="' + u + '" target="_blank" rel="noopener">&#10003; Mark done &middot; ' + esc(e.unit) + '</a>' : '';
-}
 function unitVar(n) { return 'var(' + (UNIT_VARS[n] || '--faint') + ')'; }
 function utc(iso) { return Date.UTC(parseInt(iso.substring(0,4),10), parseInt(iso.substring(5,7),10)-1, parseInt(iso.substring(8,10),10)); }
 function addDays(iso, n) { var t = new Date(utc(iso) + n*86400000); return t.getUTCFullYear() + '-' + ('0'+(t.getUTCMonth()+1)).slice(-2) + '-' + ('0'+t.getUTCDate()).slice(-2); }
@@ -151,8 +140,7 @@ function todayCard(e) {
   } else if (e.confirmed) {
     h += '<div class="status ok"><span>&#9989;</span> Cleaned by ' + esc(e.cleaner) + ' <span class="when">confirmed</span></div>';
   } else {
-    h += '<div class="status wait"><span>&#8987;</span> Assigned to ' + esc(e.cleaner) + ' <span class="when">not marked done yet</span></div>';
-    h += doneBtn(e);
+    h += '<div class="status wait"><span>&#8987;</span> Assigned to ' + esc(e.cleaner) + ' <span class="when">awaiting DONE reply</span></div>';
   }
   return h + '</div>';
 }
@@ -169,25 +157,6 @@ function openCard(e, urgent) {
   return h;
 }
 
-function dirtyCard(e, todayISO) {
-  var h = '<div class="card' + (e.scheduledBy ? ' done' : '') + '" style="--uc:' + unitVar(e.unit) + '"><div class="card-top">' + dateBadge(e) + '<div class="card-info">';
-  h += '<div class="unit-row"><span class="unit-name">' + esc(e.unit) + '</span>';
-  h += '<span class="badge ' + (e.scheduledBy ? 'repeat' : 'dirty') + '">' + (e.scheduledBy ? 'Clean booked' : 'Needs clean') + '</span>';
-  h += '</div><div class="guest">Guest checked out <b>' + pretty(e.dateISO) + '</b>';
-  if (e.days > 0) h += ' &middot; vacant ' + e.days + ' day' + (e.days === 1 ? '' : 's');
-  h += '</div><div class="meta">';
-  if (e.nextDateISO) h += '<span class="pill">Next guest ' + pretty(e.nextDateISO) + (e.nextDays > 0 ? ' &middot; ' + e.nextDays + ' days away' : '') + '</span>';
-  else h += '<span class="pill">No upcoming stay booked</span>';
-  if (!e.scheduledBy) h += '<span class="avail">Available to clean: any day</span>';
-  h += '</div></div></div>';
-  if (e.scheduledBy) {
-    h += '<div class="status wait"><span>&#128197;</span> ' + esc(e.scheduledBy) + ' signed up for ' + pretty(e.scheduledOn) + '</div>';
-  } else {
-    h += '<a class="signup-btn" href="' + signupUrl(e.unit, todayISO) + '" target="_blank" rel="noopener">Clean it &middot; ' + esc(e.unit) + '</a>';
-  }
-  return h + '</div>';
-}
-
 function assignedCard(e) {
   var h = '<div class="card done" style="--uc:' + unitVar(e.unit) + '"><div class="card-top">' + dateBadge(e) + '<div class="card-info">';
   h += '<div class="unit-row"><span class="unit-name">' + esc(e.unit) + '</span>';
@@ -195,8 +164,7 @@ function assignedCard(e) {
   h += '</div><div class="guest"><b>' + esc(e.guest) + '</b> checks in';
   if (e.stayRange) h += ' &middot; ' + esc(e.stayRange) + (e.nights ? ' &middot; ' + e.nights + ' night' + (e.nights === 1 ? '' : 's') : '');
   h += '</div>' + metaBits(e) + '</div></div>';
-  if (e.confirmed) h += '<div class="status ok"><span>&#10024;</span> Cleaned by ' + esc(e.cleaner) + ' <span class="when">done</span></div></div>';
-  else h += '<div class="status ok"><span>&#9989;</span> ' + esc(e.cleaner) + '&#39;s got it</div>' + doneBtn(e) + '</div>';
+  h += '<div class="status ok"><span>&#9989;</span> ' + esc(e.cleaner) + '&#39;s got it</div></div>';
   return h;
 }
 
@@ -211,19 +179,15 @@ function render() {
   var openUp = upcoming.filter(function (e) { return !e.cleaner; });
   var claimedUp = upcoming.filter(function (e) { return e.cleaner; });
   var openAll = today.filter(function (e) { return !e.cleaner; }).concat(openUp);
-  var dirty = (D.dirty || []).slice().sort(function (a, b) { return a.dateISO < b.dateISO ? -1 : a.dateISO > b.dateISO ? 1 : 0; });
-  var dirtyOpen = dirty.filter(function (e) { return !e.scheduledBy; });
   var urgentCutoff = addDays(todayISO, 2);
   var tomorrowISO = addDays(todayISO, 1);
 
-  var totalOpen = openAll.length + dirtyOpen.length;
   var oc = document.getElementById('opencount');
-  oc.className = 'open-count' + (totalOpen ? '' : ' zero');
-  oc.innerHTML = '<span class="n">' + totalOpen + '</span>' + (totalOpen ? 'open job' + (totalOpen === 1 ? '' : 's') : 'all covered');
+  oc.className = 'open-count' + (openAll.length ? '' : ' zero');
+  oc.innerHTML = '<span class="n">' + openAll.length + '</span>' + (openAll.length ? 'open slot' + (openAll.length === 1 ? '' : 's') : 'all covered');
 
   var sub;
-  if (dirtyOpen.length) sub = dirtyOpen.length + ' vacant unit' + (dirtyOpen.length === 1 ? '' : 's') + ' ready to clean now';
-  else if (!openAll.length) sub = 'Every turnover has a cleaner';
+  if (!openAll.length) sub = 'Every turnover has a cleaner';
   else {
     var first = openAll[0];
     var when = first.dateISO === todayISO ? 'today' : first.dateISO === tomorrowISO ? 'tomorrow' : dayName(first.dateISO) + ' ' + pretty(first.dateISO);
@@ -232,16 +196,12 @@ function render() {
   document.getElementById('subtitle').innerHTML = sub;
 
   var html = '';
-  if (!events.length && !dirty.length) {
+  if (!events.length) {
     html = '<div class="empty">No check-ins in the next two weeks. Check back soon!</div>';
   } else {
     if (today.length) {
       html += sectionHead('Today &middot; ' + dayName(todayISO) + ' ' + pretty(todayISO));
       html += today.map(function (e) { return todayCard(e); }).join('');
-    }
-    if (dirty.length) {
-      html += sectionHead('Needs cleaning now');
-      html += dirty.map(function (e) { return dirtyCard(e, todayISO); }).join('');
     }
     if (openUp.length) {
       html += sectionHead('Needs a cleaner');
