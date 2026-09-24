@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How to Mark Done</title>
+<style>
+  :root { --bg:#f7f4f0; --card:#fff; --ink:#23201c; --mute:#6f6a63; --line:#e6e0d8; --accent:#00857C; --num-ink:#fff; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#171513; --card:#211f1c; --ink:#eeeae4; --mute:#a39d95; --line:#35312c; --accent:#2bb3a8; --num-ink:#06201e; } }
+  :root[data-theme="dark"] { --bg:#171513; --card:#211f1c; --ink:#eeeae4; --mute:#a39d95; --line:#35312c; --accent:#2bb3a8; --num-ink:#06201e; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:17px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:520px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { font-size:26px; line-height:1.2; margin:0 0 8px; }
+  .lede { color:var(--mute); margin:0 0 24px; }
+  .step { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px 16px; margin-bottom:16px; }
+  .step h2 { display:flex; gap:12px; align-items:center; font-size:19px; margin:0 0 8px; }
+  .num { flex:none; width:32px; height:32px; border-radius:50%; background:var(--accent); color:var(--num-ink); display:grid; place-items:center; font-size:16px; font-weight:700; }
+  .step p { margin:0 0 12px; }
+  .step img { display:block; width:100%; height:auto; border:1px solid var(--line); border-radius:12px; }
+  .note { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; }
+  .note h2 { font-size:17px; margin:0 0 8px; }
+  .note ul { margin:0; padding-left:20px; }
+  .note li { margin-bottom:6px; }
+  a { color:var(--accent); font-weight:600; }
+  .back { display:block; text-align:center; margin-top:20px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>How to mark a clean done</h1>
+  <p class="lede">About 30 seconds. Photos are optional. (Pictures below use a sample guest.)</p>
+
+  <section class="step">
+    <h2><span class="num">1</span>Tap "Mark done" on the site</h2>
+    <p>Open the <a href="https://tanatous88.github.io/airbnb-cleaning/">cleaning site</a> and find the card for the unit you cleaned. Tap the green <b>Mark done</b> button. It shows up once the previous guest has checked out.</p>
+    <img src="help/step1.png" alt="The cleaning site with a Mark done button under a Garage Studio card assigned to Jake" width="600" height="617">
+  </section>
+
+  <section class="step">
+    <h2><span class="num">2</span>Check the details</h2>
+    <p>The page opens with the unit, date and your name already filled in. Check that the guest name matches the stay you cleaned for.</p>
+    <img src="help/step2.png" alt="The Mark a clean done page showing Garage Studio, Sep 28, Sample Guest, and Jake selected" width="600" height="719">
+  </section>
+
+  <section class="step">
+    <h2><span class="num">3</span>Add photos (optional)</h2>
+    <p>Tap the dashed box to take pictures or pick them from your camera roll. Up to 12. Tap the <b>x</b> on one to remove it. If your name isn't highlighted, tap it.</p>
+    <img src="help/step3.png" alt="The page with three photos added and the button reading Yes, it's done (+3 photos)" width="600" height="813">
+  </section>
+
+  <section class="step">
+    <h2><span class="num">4</span>Tap "Yes, it's done"</h2>
+    <p>Wait for <b>All set</b>. That's it. The site shows the unit as done within about 30 minutes.</p>
+    <img src="help/step4.png" alt="The All set screen: Garage Studio is marked done, 3 photos saved" width="600" height="301">
+  </section>
+
+  <section class="note">
+    <h2>Good to know</h2>
+    <ul>
+      <li>Nothing is saved until you tap <b>Yes, it's done</b>. Opening the link by accident is fine.</li>
+      <li>Google shows a small banner saying the page was made by an Apps Script user. That's normal; it's our page.</li>
+      <li>Forgot photos? Open the same link again and add them. It won't mark the clean twice.</li>
+      <li>Replying <b>DONE</b> to the text still works too.</li>
+    </ul>
+  </section>
+
+  <a class="back" href="https://tanatous88.github.io/airbnb-cleaning/">Back to the cleaning site</a>
+</main>
+</body>
+</html>
