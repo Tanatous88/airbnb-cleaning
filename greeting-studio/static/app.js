@@ -418,11 +418,26 @@ function previewVersion(payload) {
 
 /* ---------------- Stays ---------------- */
 
+let showAllStays = false;
+
 async function renderStays() {
   main.innerHTML = `<div class="muted">Loading…</div>`;
-  const [stays, units] = await Promise.all([api("/api/stays"), api("/api/units")]);
+  const [allStays, units] = await Promise.all([api("/api/stays"), api("/api/units")]);
   const unitOpts = units.map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join("");
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 14);
+  const stays = showAllStays ? allStays
+    : allStays.filter(s => !s.checkout_date || new Date(s.checkout_date) >= cutoff);
+  const hiddenCount = allStays.length - stays.length;
+
   let html = `<h2>Stays</h2>`;
+  if (hiddenCount > 0 || showAllStays) {
+    html += `<p class="muted small">${showAllStays
+      ? `Showing all ${allStays.length} stays. <a href="#" onclick="showAllStays=false;renderStays();return false;">Hide stays older than 2 weeks</a>`
+      : `Hiding ${hiddenCount} stay(s) that checked out more than 2 weeks ago. <a href="#" onclick="showAllStays=true;renderStays();return false;">Show all</a>`
+    }</p>`;
+  }
   html += stays.length ? `<div class="card"><table><thead><tr>
       <th>Check-in</th><th>Checkout</th><th>Guest</th><th>Unit</th><th>Status</th><th></th></tr></thead><tbody>` +
     stays.map(s => `<tr>
