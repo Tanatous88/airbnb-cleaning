@@ -29,6 +29,25 @@ MERGE_FIELD_RE = re.compile(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}")
 # Merge values + local rendering
 # ---------------------------------------------------------------------------
 
+WEEKEND_GUIDE_URL = "https://claude.ai/artifact/Aufucypx6pj1QuMLKwd5xq"
+
+
+def _weekend_guide_blurb(checkin_iso: str) -> str:
+    """Non-empty only when check-in falls on a Friday or Saturday — the
+    weekend-getaway case this guide (events, WSU/Idaho sports, restaurants)
+    is actually useful for."""
+    try:
+        if date.fromisoformat(checkin_iso).weekday() not in (4, 5):  # Fri, Sat
+            return ""
+    except ValueError:
+        return ""
+    return (
+        "🏟️ This Weekend on the Palouse\n"
+        "Since you're here for the weekend, check out our live guide to local events, "
+        f"WSU & Idaho sports schedules, and restaurant picks: {WEEKEND_GUIDE_URL}\n"
+    )
+
+
 def build_merge_values(conn, unit, stay) -> dict:
     amenities = json.loads(unit["amenities"] or "{}")
     first_name = stay["guest_name"].split()[0] if stay["guest_name"].strip() else "[MISSING]"
@@ -60,6 +79,7 @@ def build_merge_values(conn, unit, stay) -> dict:
         "door_code": phone_last4 or amenities.get("door_code") or "[MISSING]",
         "wifi_network": amenities.get("wifi_network") or "[MISSING]",
         "wifi_password": amenities.get("wifi_password") or "[MISSING]",
+        "weekend_guide": _weekend_guide_blurb(stay["checkin_date"]),
     }
 
 

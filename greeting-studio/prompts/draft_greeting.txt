@@ -29,5 +29,6 @@ Instructions:
 5. If any merge field value is missing (shown as [MISSING]), leave the template's placeholder visible so the host notices before sending.
 6. If the template already contains a sign-off, keep it exactly as written and do NOT add another. Only if the template has no sign-off, close with: {{host_signature}}
 7. If the template starts with a "Subject:" line, keep it as the first line unchanged.
+8. If a merge field's value is an empty string (not shown as [MISSING]), omit that entire line or section from the output — don't leave blank space, an empty header, or a stray line break where it would have gone.
 
 Output ONLY the message text, ready to paste into the Airbnb message box — no preamble, no explanation, no markdown.
