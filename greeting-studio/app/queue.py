@@ -12,7 +12,7 @@ import os
 import re
 import sqlite3
 import subprocess
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import urllib.request
 
@@ -32,18 +32,22 @@ MERGE_FIELD_RE = re.compile(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}")
 WEEKEND_GUIDE_URL = "https://claude.ai/artifact/Aufucypx6pj1QuMLKwd5xq"
 
 
-def _weekend_guide_blurb(checkin_iso: str) -> str:
-    """Non-empty only when check-in falls on a Friday or Saturday — the
-    weekend-getaway case this guide (events, WSU/Idaho sports, restaurants)
-    is actually useful for."""
+def _weekend_guide_blurb(checkin_iso: str, checkout_iso: str) -> str:
+    """Non-empty whenever the stay covers a Saturday or Sunday night — not
+    just a Friday/Saturday check-in, but also a mid-week check-in whose stay
+    runs into the weekend. The guide (events, WSU/Idaho sports, restaurants)
+    is useful for any of those, not only a classic weekend getaway."""
     try:
-        if date.fromisoformat(checkin_iso).weekday() not in (4, 5):  # Fri, Sat
-            return ""
+        checkin = date.fromisoformat(checkin_iso)
+        checkout = date.fromisoformat(checkout_iso)
     except ValueError:
+        return ""
+    nights = [checkin + timedelta(days=n) for n in range((checkout - checkin).days)]
+    if not any(d.weekday() in (4, 5, 6) for d in nights):  # Fri, Sat, Sun nights
         return ""
     return (
         "🏟️ This Weekend on the Palouse\n"
-        "Since you're here for the weekend, check out our live guide to local events, "
+        "Since your stay falls over the weekend, check out our live guide to local events, "
         f"WSU & Idaho sports schedules, and restaurant picks: {WEEKEND_GUIDE_URL}\n"
     )
 
@@ -79,7 +83,7 @@ def build_merge_values(conn, unit, stay) -> dict:
         "door_code": phone_last4 or amenities.get("door_code") or "[MISSING]",
         "wifi_network": amenities.get("wifi_network") or "[MISSING]",
         "wifi_password": amenities.get("wifi_password") or "[MISSING]",
-        "weekend_guide": _weekend_guide_blurb(stay["checkin_date"]),
+        "weekend_guide": _weekend_guide_blurb(stay["checkin_date"], stay["checkout_date"]),
     }
 
 
