@@ -88,7 +88,12 @@ def render_local(template: str, merge_values: dict) -> str:
     personalize (no booking message), or as fallback if the Claude call fails."""
     def sub(m):
         return str(merge_values.get(m.group(1), m.group(0)))
-    return MERGE_FIELD_RE.sub(sub, template)
+    rendered = MERGE_FIELD_RE.sub(sub, template)
+    # An empty-string field (e.g. weekend_guide on a weekday stay) leaves its
+    # own line blank; collapse the resulting run of blank lines back down to
+    # one, same as if that line had never been in the template.
+    return re.sub(r"\n{3,}", "\n\n", rendered)
+
 
 
 def missing_fields(template: str, merge_values: dict) -> list:
