@@ -718,6 +718,14 @@ def playwright_assist(stay_id: int, body: ApproveIn):
 HUMOR_LEVELS = [("subtle", "subtle"), ("medium", "medium"), ("full_whimsy", "full whimsy")]
 
 
+def _is_memorial_day(d: date) -> bool:
+    return d.month == 5 and d.weekday() == 0 and d.day >= 25  # last Monday of May
+
+
+def _is_labor_day(d: date) -> bool:
+    return d.month == 9 and d.weekday() == 0 and d.day <= 7  # first Monday of Sept
+
+
 def _seasonal_note(checkin_iso: str, checkout_iso: str) -> str:
     """A short, honest note about the holiday/season the stay fell in, if
     any — for an optional, light seasonal touch in reviews. Empty string
@@ -732,6 +740,18 @@ def _seasonal_note(checkin_iso: str, checkout_iso: str) -> str:
     span = [checkin + timedelta(days=n) for n in range(max((checkout - checkin).days, 0) + 1)]
     for d in span:
         md = (d.month, d.day)
+        if (2, 10) <= md <= (2, 14):
+            return "This stay fell right around Valentine's Day."
+        if (3, 15) <= md <= (3, 17):
+            return "This stay fell right around St. Patrick's Day."
+        if _is_memorial_day(d) or (d.month == 5 and _is_memorial_day(d + timedelta(days=1))) \
+                or (d.month == 5 and _is_memorial_day(d + timedelta(days=2))):
+            return "This stay fell over Memorial Day weekend."
+        if (6, 30) <= md <= (7, 4):
+            return "This stay fell right around the Fourth of July."
+        if _is_labor_day(d) or (d.month in (8, 9) and _is_labor_day(d + timedelta(days=1))) \
+                or (d.month in (8, 9) and _is_labor_day(d + timedelta(days=2))):
+            return "This stay fell over Labor Day weekend."
         if (10, 15) <= md <= (10, 31):
             return "This stay fell right around Halloween."
         if (11, 15) <= md <= (11, 30):
