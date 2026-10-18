@@ -718,6 +718,31 @@ def playwright_assist(stay_id: int, body: ApproveIn):
 HUMOR_LEVELS = [("subtle", "subtle"), ("medium", "medium"), ("full_whimsy", "full whimsy")]
 
 
+def _seasonal_note(checkin_iso: str, checkout_iso: str) -> str:
+    """A short, honest note about the holiday/season the stay fell in, if
+    any — for an optional, light seasonal touch in reviews. Empty string
+    if the stay doesn't fall near a notable one. Checks every day of the
+    stay, not just check-in, so a stay that starts before and ends during
+    (or just after) a window still catches it."""
+    try:
+        checkin = date.fromisoformat(checkin_iso)
+        checkout = date.fromisoformat(checkout_iso)
+    except ValueError:
+        return ""
+    span = [checkin + timedelta(days=n) for n in range(max((checkout - checkin).days, 0) + 1)]
+    for d in span:
+        md = (d.month, d.day)
+        if (10, 15) <= md <= (10, 31):
+            return "This stay fell right around Halloween."
+        if (11, 15) <= md <= (11, 30):
+            return "This stay fell right around Thanksgiving."
+        if (12, 1) <= md <= (12, 26):
+            return "This stay fell during the Christmas/holiday season."
+        if (12, 27) <= md or md <= (1, 2):
+            return "This stay fell right around New Year's."
+    return ""
+
+
 @app.post("/api/stays/{stay_id}/reviews")
 def generate_reviews(stay_id: int):
     conn = db.connect()
@@ -752,6 +777,7 @@ def generate_reviews(stay_id: int):
 
         variants = []
         conn.execute("DELETE FROM reviews WHERE stay_id = ?", (stay_id,))
+        seasonal_note = _seasonal_note(stay["checkin_date"], stay["checkout_date"])
         for key, label in HUMOR_LEVELS:
             content = claude_call(
                 conn, "generate_review", max_tokens=1000,
@@ -761,7 +787,8 @@ def generate_reviews(stay_id: int):
                 checkin_date=stay["checkin_date"],
                 checkout_date=stay["checkout_date"],
                 guest_messages="\n---\n".join(guest_msgs) or "(no messages on file)",
-                humor_level=label)
+                humor_level=label,
+                seasonal_note=seasonal_note or "(no notable holiday/season for this stay)")
             conn.execute(
                 "INSERT INTO reviews (stay_id, humor_level, content, created_at) VALUES (?, ?, ?, ?)",
                 (stay_id, key, content, db.now()))

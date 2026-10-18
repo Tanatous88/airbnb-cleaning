@@ -10,6 +10,8 @@ MESSAGES FROM THE GUEST DURING THE STAY (may be empty):
 {{guest_messages}}
 ---
 
+SEASONAL CONTEXT FOR THIS STAY: {{seasonal_note}}
+
 HUMOR LEVEL FOR THIS VARIANT: {{humor_level}}
 - "subtle": mostly warm and straightforward, with at most one light, gentle touch of personality.
 - "medium": clearly playful in one or two places, still reads as a normal host review.
@@ -22,5 +24,6 @@ Rules — these override everything else:
 4. When there IS good material, favor one or two specific, vivid details over a broad generic summary — a review that references something the guest actually said reads far better than one that could apply to any guest.
 5. Close with a genuine recommendation (e.g. "we'd happily host them again") if deserved — and for this tool, assume it is deserved unless the host edits it out.
 6. Keep it to 2-5 sentences. This is a public Airbnb review, not an essay.
+7. If the seasonal context above names a holiday/season, you MAY weave in one light, natural seasonal touch (a Halloween/Thanksgiving/Christmas/New Year's reference) — but only if it fits naturally and doesn't crowd out real details from the guest's actual stay. Never force it, never let it replace a genuine detail, and skip it entirely if there's nothing notable or it would feel shoehorned in. If there's no seasonal context, don't invent one.
 
 Output ONLY the review text — no preamble, no explanation, no quotes around it.
