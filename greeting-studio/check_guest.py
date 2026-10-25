@@ -3,12 +3,21 @@ unit name (partial match), then prints the raw stay/unit data plus the
 ACTUAL merge values the app would compute for it (imports queue.py
 directly, so this reflects real app logic, not a re-guess of it).
 
-Usage: python check_guest.py "Pamela" "Cosmo"
-(unit name arg is optional — omit to search all units)
+Usage: python check_guest.py Pamela Cosmo
+Use ALL for either argument to match everything (don't pass "" — some
+shells, including PowerShell, can silently drop an empty-string
+argument to an external program, shifting the other argument over).
 """
 import json
 import os
 import sys
+
+
+def _arg(value):
+    if value is None or value.strip().upper() in ("ALL", "*"):
+        return ""
+    return value.lower()
+
 
 sys.path.insert(0, ".")
 from app import db, queue  # noqa: E402
@@ -17,8 +26,8 @@ print(f"DB_PATH in use: {db.DB_PATH}")
 print(f"GREETING_STUDIO_DB env override: {os.environ.get('GREETING_STUDIO_DB')!r}")
 print(f"file exists: {os.path.exists(db.DB_PATH)}")
 
-guest_query = (sys.argv[1] if len(sys.argv) > 1 else "").lower()
-unit_query = (sys.argv[2] if len(sys.argv) > 2 else "").lower()
+guest_query = _arg(sys.argv[1] if len(sys.argv) > 1 else None)
+unit_query = _arg(sys.argv[2] if len(sys.argv) > 2 else None)
 
 conn = db.connect()
 total_stays = conn.execute("SELECT COUNT(*) c FROM stays").fetchone()["c"]
