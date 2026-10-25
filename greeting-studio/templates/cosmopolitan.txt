@@ -13,7 +13,7 @@ We are so excited to host you at The Cosmopolitan! Your unit is on the middle fl
 
 🔑 Keyless Check-In
 - Check-in is anytime after {{checkin_time}}.
-- Door Lock: Eufy Smart Lock, now synced directly with Airbnb — you can find your personal door code right in the Airbnb app under this reservation's check-in instructions. It's the last 4 digits of the cell phone number on your Airbnb account, which for your stay is {{door_code}}.
+- Door Lock: Schlage Smart Lock, now synced directly with Airbnb — you can find your personal door code right in the Airbnb app under this reservation's check-in instructions. It's the last 4 digits of the cell phone number on your Airbnb account, which for your stay is {{door_code}}.
 - To lock when leaving: press and hold the Lock icon on the keypad.
 
 📶 Wi-Fi & Entertainment
