@@ -79,6 +79,8 @@ body { font-family: "Instrument Sans", -apple-system, "Segoe UI", Roboto, sans-s
 .board-n { width: 20px; text-align: right; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--muted); }
 .empty { text-align: center; padding: 48px 20px; color: var(--muted); font-size: 15px; }
 .stale { margin-top: 14px; background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 10px 13px; font-size: 13px; font-weight: 600; }
+.retry { margin-left: 8px; font: inherit; font-weight: 700; color: var(--warn); background: none; border: 1.5px solid var(--warn); border-radius: 8px; padding: 3px 10px; cursor: pointer; }
+.retry:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .updated { text-align: center; font-size: 11.5px; color: var(--faint); margin-top: 22px; }
 </style>
 </head>
@@ -248,7 +250,8 @@ function render() {
   document.getElementById('subtitle').innerHTML = sub;
 
   var html = '';
-  if (stale) html += '<div class="stale" role="status">&#9888; Schedule last refreshed ' + esc(D.generatedAt) + '. Sign-ups and cleans since then may not show yet.</div>';
+  if (liveState === 'failed') html += '<div class="stale" role="status">&#9888; Could not load the live schedule. Showing the copy saved ' + esc(D.generatedAt) + ', which may be out of date.<button class="retry" type="button" onclick="loadLive()">Try again</button></div>';
+  else if (stale && liveState !== 'loading') html += '<div class="stale" role="status">&#9888; Schedule last refreshed ' + esc(D.generatedAt) + '. Sign-ups and cleans since then may not show yet.</div>';
   if (!events.length && !dirty.length) {
     html = '<div class="empty">No check-ins in the next two weeks. Check back soon!</div>';
   } else {
@@ -289,10 +292,49 @@ function render() {
     });
     html += '</div>';
   }
-  html += '<p class="updated">Last updated: ' + esc(D.generatedAt) + ' &middot; refreshes automatically</p>';
+  if (D.live) html += '<p class="updated">Live schedule &middot; loaded ' + esc(D.generatedAt) + '</p>';
+  else if (liveState === 'loading') html += '<p class="updated">Saved copy from ' + esc(D.generatedAt) + ' &middot; checking for the latest&hellip;</p>';
+  else html += '<p class="updated">Last updated: ' + esc(D.generatedAt) + '</p>';
   document.getElementById('content').innerHTML = html;
 }
+
+// The schedule is loaded live from the Mark done web app each time the page opens,
+// so sign-ups show within about a minute. The data baked into this file is only the
+// fallback for when that request fails.
+var LIVE_TIMEOUT_MS = 12000;
+var liveState = '';      // '' | 'loading' | 'ok' | 'failed'
+var liveLoadedAt = 0;
+function loadLive() {
+  if (liveState === 'loading' || DONE_URL.indexOf('https://') !== 0) return;
+  var finished = false, tag = document.createElement('script');
+  var timer = setTimeout(function () { finish(false); }, LIVE_TIMEOUT_MS);
+  function finish(ok) {
+    if (finished) return;
+    finished = true;
+    clearTimeout(timer);
+    if (tag.parentNode) tag.parentNode.removeChild(tag);
+    liveState = ok ? 'ok' : 'failed';
+    if (ok) liveLoadedAt = Date.now();
+    render();
+  }
+  window.__cleaningLive = function (d) {
+    if (finished) return;
+    var good = d && !d.error && d.events && typeof d.events.length === 'number' && /^\d{4}-\d\d-\d\d$/.test(d.todayISO || '');
+    if (good) window.CLEANING_DATA = d;
+    finish(!!good);
+  };
+  tag.onerror = function () { finish(false); };
+  tag.src = DONE_URL + '?data=1&callback=__cleaningLive&t=' + Date.now();
+  liveState = 'loading';
+  render();
+  document.head.appendChild(tag);
+}
+// Cleaners leave this tab open: refresh when they come back to it.
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden && Date.now() - liveLoadedAt > 60000) loadLive();
+});
 render();
+loadLive();
 </script>
 </body>
 </html>
