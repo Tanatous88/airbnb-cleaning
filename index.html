@@ -78,6 +78,7 @@ body { font-family: "Instrument Sans", -apple-system, "Segoe UI", Roboto, sans-s
 .board-bar { height: 100%; border-radius: 99px; background: var(--accent); }
 .board-n { width: 20px; text-align: right; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--muted); }
 .empty { text-align: center; padding: 48px 20px; color: var(--muted); font-size: 15px; }
+.stale { margin-top: 14px; background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 10px 13px; font-size: 13px; font-weight: 600; }
 .updated { text-align: center; font-size: 11.5px; color: var(--faint); margin-top: 22px; }
 </style>
 </head>
@@ -200,10 +201,25 @@ function assignedCard(e) {
   return h;
 }
 
+// The schedule is baked in by a refresh job. If that job misses a run, don't keep
+// showing an old day as "Today": use the real Pacific date and say the data is old.
+function pacificNow() {
+  try {
+    var p = {};
+    new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' })
+      .formatToParts(new Date()).forEach(function (x) { p[x.type] = x.value; });
+    return { iso: p.year + '-' + p.month + '-' + p.day, hour: parseInt(p.hour, 10) };
+  } catch (err) { return null; }
+}
+
 function sectionHead(label) { return '<div class="section-head">' + label + ' <span class="rule"></span></div>'; }
 
 function render() {
   var D = window.CLEANING_DATA;
+  var now = pacificNow();
+  // Allow an hour after midnight for the nightly refresh before calling it stale.
+  var stale = !!now && /^\d{4}-\d\d-\d\d$/.test(D.todayISO) && now.iso > D.todayISO && (now.hour >= 1 || now.iso > addDays(D.todayISO, 1));
+  if (stale) D.todayISO = now.iso;
   var todayISO = D.todayISO;
   var events = (D.events || []).slice().sort(function (a, b) { return a.dateISO < b.dateISO ? -1 : a.dateISO > b.dateISO ? 1 : 0; });
   var today = events.filter(function (e) { return e.dateISO === todayISO; });
@@ -232,6 +248,7 @@ function render() {
   document.getElementById('subtitle').innerHTML = sub;
 
   var html = '';
+  if (stale) html += '<div class="stale" role="status">&#9888; Schedule last refreshed ' + esc(D.generatedAt) + '. Sign-ups and cleans since then may not show yet.</div>';
   if (!events.length && !dirty.length) {
     html = '<div class="empty">No check-ins in the next two weeks. Check back soon!</div>';
   } else {
