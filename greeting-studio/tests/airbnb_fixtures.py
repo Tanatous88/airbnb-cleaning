@@ -87,7 +87,8 @@ class LocalAirbnb:
         pw = self._cm.__enter__()
         outer = self
 
-        def launch_persistent_context(_profile, headless=False, **_):
+        def launch_persistent_context(_profile, headless=False, **kw):
+            outer.launch_args = kw.get("args")
             ctx = pw.chromium.launch_persistent_context(
                 outer.profile_dir, headless=True, **launch_kwargs())
             ctx.route("**/*", lambda route: route.fulfill(

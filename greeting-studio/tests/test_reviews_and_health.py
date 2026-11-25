@@ -11,7 +11,7 @@ def client(monkeypatch):
     fake = FakeClaude()
     monkeypatch.setattr(main, "ask_claude", fake)
     monkeypatch.setattr(browser_assist, "read_thread",
-                        lambda code, max_messages=30: {"messages": [], "guest_name": ""})
+                        lambda code, max_messages=30, **_: {"messages": [], "guest_name": ""})
     c = TestClient(main.app)  # no `with`: startup (scheduler) does not run
     c.fake = fake
     return c

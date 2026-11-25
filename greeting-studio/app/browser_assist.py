@@ -359,13 +359,20 @@ def _collect_thread(page, max_messages: int = 30) -> dict:
     return {"messages": texts[-max_messages:], "guest_name": name[:60]}
 
 
-def read_thread(confirmation_code: str, max_messages: int = 30) -> dict:
+# The unattended morning read runs in a normal (not headless) Chrome window —
+# Airbnb is quick to block headless browsers — but parks it far off-screen so
+# it doesn't pop up over whatever the host is doing on the PC.
+HIDDEN_WINDOW_ARGS = ["--window-position=-32000,-32000", "--window-size=1280,900"]
+
+
+def read_thread(confirmation_code: str, max_messages: int = 30, hidden: bool = False) -> dict:
     """Open the reservation's message thread and read it. Returns
     {"messages": [...guest messages...], "guest_name": "Melissa" or ""}."""
     if not confirmation_code:
         return {"messages": [], "guest_name": ""}
     with sync_playwright() as pw:
-        context = pw.chromium.launch_persistent_context(PROFILE_DIR, headless=False)
+        context = pw.chromium.launch_persistent_context(
+            PROFILE_DIR, headless=False, args=HIDDEN_WINDOW_ARGS if hidden else None)
         try:
             page = context.pages[0] if context.pages else context.new_page()
             _open_reservation(page, confirmation_code)
@@ -570,6 +577,25 @@ def fill_airbnb_review(confirmation_code: str, text: str, keep_open_seconds: int
     if "error" in outcome and "detail" not in outcome:
         raise RuntimeError(outcome["error"])
     return outcome["detail"]
+
+
+def open_login_window(keep_open_seconds: int = 900) -> str:
+    """Open Airbnb in a visible window using the app's own browser profile so
+    the host can log in again. Returns at once; the window stays until closed."""
+    def run():
+        try:
+            with sync_playwright() as pw:
+                context = pw.chromium.launch_persistent_context(PROFILE_DIR, headless=False)
+                page = context.pages[0] if context.pages else context.new_page()
+                page.goto("https://www.airbnb.com/hosting", wait_until="domcontentloaded",
+                          timeout=60_000)
+                _wait_until_closed(page, keep_open_seconds)
+                context.close()
+        except Exception as e:
+            print(f"(!) Airbnb login window: {e}")
+    threading.Thread(target=run, daemon=True).start()
+    return ("An Airbnb window is opening on the AI PC. Log in there if asked, "
+            "then close the window.")
 
 
 def _wait_until_closed(page, seconds: int) -> None:

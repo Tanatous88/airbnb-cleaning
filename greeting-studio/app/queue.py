@@ -32,7 +32,8 @@ MERGE_FIELD_RE = re.compile(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}")
 WEEKEND_GUIDE_URL = "https://claude.ai/artifact/Aufucypx6pj1QuMLKwd5xq"
 
 
-def _weekend_guide_blurb(checkin_iso: str, checkout_iso: str) -> str:
+def _weekend_guide_blurb(checkin_iso: str, checkout_iso: str,
+                         url: str = WEEKEND_GUIDE_URL) -> str:
     """Non-empty whenever the stay covers a Saturday or Sunday night — not
     just a Friday/Saturday check-in, but also a mid-week check-in whose stay
     runs into the weekend. The guide (events, WSU/Idaho sports, restaurants)
@@ -48,7 +49,7 @@ def _weekend_guide_blurb(checkin_iso: str, checkout_iso: str) -> str:
     return (
         "🏟️ This Weekend on the Palouse\n"
         "Since your stay falls over the weekend, check out our live guide to local events, "
-        f"WSU & Idaho sports schedules, and restaurant picks: {WEEKEND_GUIDE_URL}\n"
+        f"WSU & Idaho sports schedules, and restaurant picks: {url}\n"
     )
 
 
@@ -87,7 +88,9 @@ def build_merge_values(conn, unit, stay) -> dict:
                       or amenities.get("door_code_fallback") or "[MISSING]"),
         "wifi_network": amenities.get("wifi_network") or "[MISSING]",
         "wifi_password": amenities.get("wifi_password") or "[MISSING]",
-        "weekend_guide": _weekend_guide_blurb(stay["checkin_date"], stay["checkout_date"]),
+        "weekend_guide": _weekend_guide_blurb(
+            stay["checkin_date"], stay["checkout_date"],
+            db.get_setting(conn, "weekend_guide_url", "") or WEEKEND_GUIDE_URL),
     }
 
 
@@ -428,7 +431,7 @@ def read_thread_context(conn, stay):
         return stored, ("stored" if stored else "none"), ""
     try:
         from .browser_assist import read_thread
-        thread = read_thread(code)
+        thread = read_thread(code, hidden=db.get_setting(conn, "hide_browser", "1") == "1")
     except Exception as e:
         note = "couldn't read the Airbnb thread, so this is the plain template (" \
             + _short_reason(e) + ")"

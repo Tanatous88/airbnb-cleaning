@@ -281,6 +281,14 @@ def init_db() -> None:
         # Welcome messages are drafted this many days before check-in
         # (0 = on arrival day). The host sends them the day before.
         "welcome_days_before": "1",
+        # Morning Airbnb read runs in an off-screen window (see browser_assist).
+        "hide_browser": "1",
+        # Link used in welcome messages for stays over a weekend. Can be
+        # switched to e.g. https://threeforksaccommodations.com/weekend once
+        # the website redirects there.
+        "weekend_guide_url": "https://claude.ai/artifact/Aufucypx6pj1QuMLKwd5xq",
+        "summary_email_enabled": "0",
+        "summary_email_to": "",
     }
     for k, v in defaults.items():
         conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, v))

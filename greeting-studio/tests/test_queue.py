@@ -16,7 +16,7 @@ def env(monkeypatch):
     monkeypatch.setattr(queue, "sync_calendars", lambda: {"errors": []})
     monkeypatch.setattr(queue, "_notify", lambda summary: None)
     monkeypatch.setattr(queue, "ask_claude", fake)
-    monkeypatch.setattr(browser_assist, "read_thread", lambda code, max_messages=30: thread)
+    monkeypatch.setattr(browser_assist, "read_thread", lambda code, max_messages=30, **_: thread)
     return {"claude": fake, "thread": thread}
 
 
@@ -48,7 +48,7 @@ def test_no_name_anywhere_needs_setup(conn, env):
 
 
 def test_scrape_failure_is_explained(conn, env, monkeypatch):
-    def boom(code, max_messages=30):
+    def boom(code, max_messages=30, **_):
         raise RuntimeError("Airbnb session expired — log in again")
     monkeypatch.setattr(browser_assist, "read_thread", boom)
     set_template(conn, "The Studio", TEMPLATE)

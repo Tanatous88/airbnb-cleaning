@@ -174,11 +174,35 @@ used to keep port 8321 locked) and restarted. Output goes to `app.log` / `app_er
 | `stop_app.ps1` | Stop the app and pause auto-start until `start_app.ps1` |
 | `uninstall_autostart.ps1` | Remove the task completely |
 
+## Morning summary email
+
+Settings → **Morning summary email** sends you a short email after the 7 AM run, listing
+the welcome messages, check-in notes and reviews waiting, with a link to the dashboard.
+It's only sent on days with something to do. It goes out through your own email account:
+add `SMTP_USER` and `SMTP_PASSWORD` to `.env` (for Gmail, an *app password* from Google
+Account → Security → 2-Step Verification → App passwords), restart the app, then use
+**Send a test now**.
+
+## Weekend guide link
+
+Welcome messages for stays over a Friday, Saturday or Sunday night link to the Palouse
+Weekend Guide. The link is a setting (Settings → **Weekend guide link**). To use
+`https://threeforksaccommodations.com/weekend`, add a file named `_redirects` to the
+website folder containing
+
+```
+/weekend  https://claude.ai/artifact/Aufucypx6pj1QuMLKwd5xq  302
+```
+
+re-upload the site to Netlify, check the new link opens the guide, then paste it into
+the setting.
+
 ## Health page
 
 The **Health** tab replaces the old `check_*.py` / PowerShell debugging scripts:
 
-- whether the Airbnb login is still valid, and when the calendars last synced (with a
+- whether the Airbnb login is still valid (with an **Open Airbnb login window** button —
+  the morning check runs off-screen, so this is how you log back in), and when the calendars last synced (with a
   **Sync now** button) and the morning queue / review auto-draft last ran;
 - per unit: calendar feed set, template version, and how many stays came with a
   phone number for the door code;

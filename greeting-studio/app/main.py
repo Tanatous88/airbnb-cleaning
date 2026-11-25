@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import audit as audit_mod
-from . import db, maintenance, parsers
+from . import db, maintenance, notify, parsers
 from . import queue as queue_mod
 from .claude import ClaudeError, ask_claude, render_prompt, set_api_key
 from .queue import build_merge_values, read_thread_context
@@ -1160,7 +1160,7 @@ def send_queue_item(item_id: int, body: QueueEdit):
 def morning_job():
     """Everything that runs unattended at 7 AM. Each part is isolated so one
     failing (e.g. Airbnb logged out) doesn't stop the others."""
-    for job in (queue_mod.build_queue_for_today, auto_draft_reviews):
+    for job in (queue_mod.build_queue_for_today, auto_draft_reviews, notify.send_morning_summary):
         try:
             job()
         except Exception as e:
@@ -1229,6 +1229,26 @@ def merge_duplicates():
         conn.close()
 
 
+@app.post("/api/summary/send-now")
+def summary_send_now():
+    """Settings → "Send a test now": today's summary, even if empty."""
+    try:
+        return notify.send_morning_summary(force=True)
+    except notify.NotConfigured as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Couldn't send the email: {e}")
+
+
+@app.post("/api/airbnb/login-window")
+def airbnb_login_window():
+    try:
+        from .browser_assist import open_login_window
+    except ImportError:
+        raise HTTPException(status_code=501, detail="Playwright is not installed.")
+    return {"ok": True, "detail": open_login_window()}
+
+
 @app.post("/api/health/sync")
 def sync_now():
     return queue_mod.sync_calendars()
@@ -1253,6 +1273,10 @@ class SettingsIn(BaseModel):
     auto_reviews_enabled: Optional[bool] = None
     manual_mode: Optional[bool] = None
     welcome_days_before: Optional[int] = None
+    hide_browser: Optional[bool] = None
+    weekend_guide_url: Optional[str] = None
+    summary_email_enabled: Optional[bool] = None
+    summary_email_to: Optional[str] = None
 
 
 @app.get("/api/settings")
@@ -1276,6 +1300,14 @@ def get_settings():
             "auto_reviews_enabled": db.get_setting(conn, "auto_reviews_enabled", "1") == "1",
             "manual_mode": db.get_setting(conn, "manual_mode", "1") == "1",
             "welcome_days_before": queue_mod.welcome_lead_days(conn),
+            "hide_browser": db.get_setting(conn, "hide_browser", "1") == "1",
+            "weekend_guide_url": db.get_setting(conn, "weekend_guide_url", "")
+                                 or queue_mod.WEEKEND_GUIDE_URL,
+            "summary_email_enabled": db.get_setting(conn, "summary_email_enabled", "0") == "1",
+            "summary_email_to": db.get_setting(conn, "summary_email_to", ""),
+            "smtp_configured": notify.smtp_configured(),
+            "summary_email_last_sent": db.get_setting(conn, "summary_email_last_sent", ""),
+            "summary_email_last_error": db.get_setting(conn, "summary_email_last_error", ""),
         }
     finally:
         conn.close()
@@ -1290,10 +1322,21 @@ def update_settings(body: SettingsIn):
             val = getattr(body, key)
             if val is not None:
                 db.set_setting(conn, key, val)
-        for key in ("midstay_enabled", "auto_reviews_enabled", "manual_mode"):
+        for key in ("midstay_enabled", "auto_reviews_enabled", "manual_mode", "hide_browser",
+                    "summary_email_enabled"):
             val = getattr(body, key)
             if val is not None:
                 db.set_setting(conn, key, "1" if val else "0")
+        if body.weekend_guide_url is not None:
+            url = body.weekend_guide_url.strip()
+            if url and not url.startswith(("https://", "http://")):
+                raise HTTPException(status_code=400, detail="The weekend guide link must start with https://")
+            db.set_setting(conn, "weekend_guide_url", url or queue_mod.WEEKEND_GUIDE_URL)
+        if body.summary_email_to is not None:
+            to = body.summary_email_to.strip()
+            if to and ("@" not in to or " " in to):
+                raise HTTPException(status_code=400, detail="That email address doesn't look right")
+            db.set_setting(conn, "summary_email_to", to)
         if body.welcome_days_before is not None:
             if not 0 <= body.welcome_days_before <= 3:
                 raise HTTPException(status_code=400, detail="Days before check-in must be 0-3")

@@ -934,7 +934,8 @@ async function renderHealth() {
   } else {
     html += `<p>${ok(true, "No uncommitted code changes")}</p>`;
   }
-  html += `<p>${ok(!h.airbnb_session_expired, "Airbnb login OK", "Airbnb login expired — use Browser assist on any draft to log in again")}</p></div>`;
+  html += `<p>${ok(!h.airbnb_session_expired, "Airbnb login OK", "Airbnb login expired — names and guest messages can't be read until you log in again")}
+    <button class="secondary small" onclick="airbnbLoginWindow(this)" title="Opens Airbnb on the AI PC in the app's own browser so you can log in">Open Airbnb login window</button></p></div>`;
 
   const sum = h.calendar.summary;
   html += `<div class="card"><h3>Calendar sync</h3>
@@ -944,7 +945,9 @@ async function renderHealth() {
     ${sum && sum.errors && sum.errors.length
       ? `<p class="health-bad">Errors from the last sync:</p><ul>${sum.errors.map(e => `<li>${esc(e)}</li>`).join("")}</ul>`
       : `<p>${ok(true, "No sync errors")}</p>`}
-    <p class="muted small">Morning queue last ran ${fmtTime(h.queue.last_run)} · reviews last auto-drafted ${fmtTime(h.reviews.last_auto_run)}</p></div>`;
+    <p class="muted small">Morning queue last ran ${fmtTime(h.queue.last_run)} · reviews last auto-drafted ${fmtTime(h.reviews.last_auto_run)}${
+      h.summary_email && h.summary_email.enabled ? ` · summary email last sent ${fmtTime(h.summary_email.last_sent)}` : ""}</p>
+    ${h.summary_email && h.summary_email.last_error ? `<p class="health-bad">Summary email failed: ${esc(h.summary_email.last_error)}</p>` : ""}</div>`;
 
   html += `<div class="card"><h3>Units</h3><table><thead><tr><th>Unit</th><th>Airbnb calendar feed</th><th>Template</th><th>Door codes from Airbnb</th></tr></thead><tbody>`;
   for (const u of h.units) {
@@ -977,6 +980,14 @@ async function renderHealth() {
     <p>${ok(h.safeguards.stays_unique && h.safeguards.queue_unique, "Duplicate safeguards active", "Duplicate safeguards off until duplicates are merged")}</p></div>`;
 
   main.innerHTML = html;
+}
+
+async function airbnbLoginWindow(btn) {
+  busy(btn, true);
+  try {
+    const r = await api("/api/airbnb/login-window", { method: "POST" });
+    toast(r.detail);
+  } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
 }
 
 async function healthSync(btn) {
@@ -1029,6 +1040,29 @@ async function renderSettings() {
     <label><input type="checkbox" id="set-manual-mode" ${s.manual_mode ? "checked" : ""}>
       Copy &amp; paste mode — I paste messages and reviews into Airbnb myself
       <span class="muted">(hides Auto-send, Browser assist and the Airbnb-login banner; the Copy &amp; open and I sent it buttons stay)</span></label>
+  </div>
+  <div class="card">
+    <h3>Morning summary email</h3>
+    <p class="muted small">After the 7 AM run, an email listing the welcome messages, check-in notes and reviews
+      waiting for you, with a link to the dashboard. Sent from your own email account; only on days with something to do.</p>
+    ${s.smtp_configured ? "" : `<p class="small" style="color:var(--red)">Email login not set up yet: add SMTP_USER and SMTP_PASSWORD
+      (a Gmail app password) to the .env file on the AI PC, then restart the app. See .env.example.</p>`}
+    <label><input type="checkbox" id="set-summary-on" ${s.summary_email_enabled ? "checked" : ""}> Send me the morning summary</label>
+    <label>Send to</label>
+    <input id="set-summary-to" type="email" value="${esc(s.summary_email_to || "")}" placeholder="you@example.com">
+    <div class="row" style="margin-top:8px"><button class="secondary small" onclick="sendSummaryNow(this)">Send a test now</button>
+      ${s.summary_email_last_sent ? `<span class="muted small">Last sent ${esc(s.summary_email_last_sent.replace("T", " ").slice(0, 16))} UTC</span>` : ""}</div>
+    ${s.summary_email_last_error ? `<p class="small" style="color:var(--red)">Last attempt failed: ${esc(s.summary_email_last_error)}</p>` : ""}
+  </div>
+  <div class="card">
+    <h3>Weekend guide link</h3>
+    <p class="muted small">Added to welcome messages for stays over a Friday, Saturday or Sunday night. Open it in a browser to check it works before saving.</p>
+    <input id="set-guide-url" value="${esc(s.weekend_guide_url || "")}">
+  </div>
+  <div class="card">
+    <h3>Airbnb browser</h3>
+    <label><input type="checkbox" id="set-hide-browser" ${s.hide_browser ? "checked" : ""}>
+      Keep the morning Airbnb check out of sight <span class="muted">(runs off-screen instead of popping up on the AI PC; if Airbnb logs you out, use Health → Open Airbnb login window)</span></label>
   </div>
   <div class="card">
     <h3>Welcome message timing</h3>
@@ -1084,6 +1118,10 @@ async function saveSettings(btn) {
       auto_reviews_enabled: $("#set-auto-reviews").checked,
       manual_mode: $("#set-manual-mode").checked,
       welcome_days_before: Number($("#set-welcome-lead").value),
+      summary_email_enabled: $("#set-summary-on").checked,
+      summary_email_to: $("#set-summary-to").value.trim(),
+      weekend_guide_url: $("#set-guide-url").value.trim(),
+      hide_browser: $("#set-hide-browser").checked,
       midstay_enabled: $("#set-midstay").checked,
       midstay_template: $("#set-midstay-template").value };
     const key = $("#set-key").value.trim();
@@ -1092,6 +1130,22 @@ async function saveSettings(btn) {
     manualMode = body.manual_mode;
     toast("Settings saved ✓"); renderSettings();
   } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
+}
+
+async function sendSummaryNow(btn) {
+  busy(btn, true);
+  try {
+    await saveSettingsQuietly();
+    const r = await api("/api/summary/send-now", { method: "POST" });
+    toast(`Sent ✓ "${r.subject}"`);
+  } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
+}
+
+async function saveSettingsQuietly() {
+  // so "Send a test now" uses the address just typed, without a separate Save click
+  await api("/api/settings", { method: "PUT", body: {
+    summary_email_enabled: $("#set-summary-on").checked,
+    summary_email_to: $("#set-summary-to").value.trim() } });
 }
 
 /* ---------------- boot ---------------- */

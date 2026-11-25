@@ -73,3 +73,13 @@ def test_login_page_is_reported(airbnb, monkeypatch):
     state, seen = _capture_on_close(monkeypatch)
     monkeypatch.setattr(ba, "_wait_until_closed", lambda page, s: seen.set())
     assert "login page" in ba.fill_airbnb_review("HMTEST123", "text")
+
+
+def test_hidden_read_parks_window_off_screen(airbnb):
+    airbnb(reservation_html())
+    local = ba.sync_playwright
+    out = ba.read_thread("HMTEST123", hidden=True)
+    assert out["guest_name"] == "Melissa"
+    assert "--window-position=-32000,-32000" in local.launch_args
+    ba.read_thread("HMTEST123")
+    assert local.launch_args is None  # user-visible by default
