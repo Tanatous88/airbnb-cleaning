@@ -230,7 +230,7 @@ def fill_airbnb_message(confirmation_code: str, text: str, wait_seconds: int = 3
         return detail
 
 
-def read_thread_messages(confirmation_code: str, max_messages: int = 10) -> list:
+def read_thread_messages(confirmation_code: str, max_messages: int = 30) -> list:
     """Best-effort scrape of the guest's messages for draft/review personalization.
     Returns [] on anything unexpected — the caller falls back to the stay's
     stored booking message."""
@@ -272,7 +272,11 @@ def read_thread_messages(confirmation_code: str, max_messages: int = 10) -> list
                             texts.append(t)
                     if texts:
                         break
-            return texts[:max_messages]
+            # Keep the most RECENT messages when there are more than the cap —
+            # texts is in chronological (oldest-first) order, and recent
+            # messages (post-stay "had a great time!" comments) matter far
+            # more for reviews than early booking-logistics questions.
+            return texts[-max_messages:]
         finally:
             context.close()
 
