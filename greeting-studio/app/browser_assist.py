@@ -100,10 +100,33 @@ DEBUG_SCREENSHOT_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "debug_thread_read.png"
 )
 
+# Ordered most-specific first. Airbnb's reservation page also renders promo
+# cards whose label merely CONTAINS "message" — e.g. a "Send a checkout
+# message / Let guests know how to lock up" card that sits ABOVE the real
+# Message button in the DOM, inside a wrapper div
+# ([data-testid="hosting-details-contextual-action"]) that swallows pointer
+# events. A substring selector picks that card first and then burns the full
+# click timeout on an element that can never be clicked — that is the
+# "ElementHandle.click: Timeout 30000ms exceeded ... intercepts pointer
+# events" failure. Match the real button exactly instead; the substring
+# match survives only as a last resort, with promo cards filtered out below.
 MESSAGE_THREAD_BUTTON_SELECTORS = [
+    "button[aria-label='Message']",
+    "a[aria-label='Message']",
+    "button:text-is('Message')",
+    "a:text-is('Message')",
+    "a[href*='/hosting/messages/']",
     "button:has-text('Message')",
     "a:has-text('Message')",
 ]
+
+# Wrapper around the promo/contextual cards described above — anything inside
+# it is never the thread button.
+PROMO_WRAPPER_SELECTOR = "[data-testid='hosting-details-contextual-action']"
+
+# The thread opens as a modal over the reservation page; either of these
+# appearing is proof the click actually landed.
+THREAD_OPEN_SELECTOR = "[data-testid='message-list'], [role='dialog']"
 
 MESSAGE_BOX_SELECTORS = [
     "textarea[placeholder*='message' i]",
@@ -151,18 +174,56 @@ def _check_logged_in(page) -> None:
 
 
 def _open_reservation(page, confirmation_code: str) -> None:
-    page.goto(_reservation_url(confirmation_code), wait_until="domcontentloaded", timeout=60_000)
+    """Navigate to the reservation page, tolerating Airbnb's own redirect.
+
+    /hosting/reservations/details/<code> client-side-redirects to
+    /hosting/stay/<code> the instant it loads. When that redirect beats
+    goto()'s own navigation, Playwright raises
+    "net::ERR_ABORTED; maybe frame was detached?" even though the browser
+    landed exactly where we wanted. So: retry a couple of times, and treat
+    "we're on an airbnb.com page" as success regardless of what goto said.
+    Only a page that never got anywhere is a real failure."""
+    url = _reservation_url(confirmation_code)
+    last_err = None
+    for _ in range(3):
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+            last_err = None
+            break
+        except Exception as e:
+            last_err = e
+            if "airbnb.com" in (page.url or ""):
+                last_err = None
+                break
+            page.wait_for_timeout(1_500)
+    if last_err is not None:
+        raise last_err
     page.wait_for_timeout(2_000)  # let the SPA hydrate before judging the page
 
 
 def _click_into_message_thread(page) -> bool:
     """From the reservation page, follow the "Message" button to the real
-    thread. Returns True if a button was found and clicked."""
+    thread. Returns True once a click actually opens the thread.
+
+    Every candidate gets a SHORT click timeout and is verified by waiting for
+    the thread modal to appear, so a wrong guess costs a few seconds and moves
+    on instead of hanging the whole run for 30s (see the selector-list comment
+    above for the promo-card trap that used to do exactly that)."""
     for selector in MESSAGE_THREAD_BUTTON_SELECTORS:
-        btn = page.query_selector(selector)
-        if btn:
-            btn.click()
-            page.wait_for_timeout(2_500)
+        for el in page.query_selector_all(selector):
+            try:
+                if not el.is_visible():
+                    continue
+                # Skip Airbnb's promo/contextual cards ("Send a checkout
+                # message", ...) — they match on text but are unclickable.
+                if el.evaluate(
+                        "(el, sel) => !!el.closest(sel)", PROMO_WRAPPER_SELECTOR):
+                    continue
+                el.click(timeout=5_000)
+                page.wait_for_selector(THREAD_OPEN_SELECTOR, timeout=8_000)
+            except Exception:
+                continue
+            page.wait_for_timeout(2_500)  # let the thread finish rendering
             return True
     return False
 
