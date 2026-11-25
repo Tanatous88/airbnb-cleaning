@@ -9,7 +9,7 @@ Just reply with your estimated arrival time. We bake homemade monkey bread for e
 - Address: 605 SW Walnut St, Pullman, WA 99163
 
 🚗 Parking
-- The driveway is a bit tricky while being redone — please park in one of the spots at the top of the driveway, or feel free to park along the street. Take extra care along the pathway and newly redesigned stairs leading to the entrance.
+- The driveway is a steep incline, so we recommend parking in one of the spots at the top of the driveway or along the street. Take care on the pathway and stairs leading to the entrance, especially when it's wet or icy.
 
 🔑 Keyless Check-In
 - Check-in is anytime after {{checkin_time}}.
