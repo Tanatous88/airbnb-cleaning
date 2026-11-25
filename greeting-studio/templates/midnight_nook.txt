@@ -1,8 +1,9 @@
-Subject: Welcome to The Midnight Nook! Check-in details & guest guide 🌙
-
 Hi {{guest_first_name}},
 
 We are so excited to host you at The Midnight Nook! Your unit is on the lower floor of our triplex at 315 SW Walnut Street.
+
+🍞 What time will you arrive?
+Just reply with your estimated arrival time. We bake homemade monkey bread for every stay and love timing it so it's fresh and warm right as you get here.
 
 📍 Address & Arrival Instructions
 - Address: 315 SW Walnut Street, Pullman, WA 99163
@@ -30,9 +31,6 @@ We are so excited to host you at The Midnight Nook! Your unit is on the lower fl
 - Student & Family Visits: Your WSU student is always welcome to visit and hang out — only registered guests may stay overnight.
 - Quiet Hours: 11:00 PM – 7:00 AM (sound can carry between levels).
 - Smoke-Free: This is a 100% non-smoking and non-vaping property.
-
-🍞 Fresh & Warm Monkey Bread!
-Let us know your estimated arrival time when you can! We love timing the delivery of our homemade monkey bread so it's fresh and warm right as you arrive.
 
 📱 Need Anything?
 If you have questions or need local recommendations, message us in the app or reach out directly:

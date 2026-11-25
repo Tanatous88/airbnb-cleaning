@@ -1,8 +1,9 @@
-Subject: Welcome to the Bunkhouse! Check-in details & warm treats 🏡
-
 Hi {{guest_first_name}},
 
 We are so excited to host you at The Bunkhouse! Because the Bunkhouse and our sibling unit (The Garage) are located on the same property as our main home, we've put together a few helpful details to make your arrival and stay seamless.
+
+🍞 What time will you arrive?
+Just reply with your estimated arrival time. We bake homemade monkey bread for every stay and love timing it so it's fresh and warm right as you get here.
 
 📍 Address & Arrival Instructions
 - Address: 1303 Old Wawawai Rd, Pullman, WA 99163
@@ -33,9 +34,6 @@ You're staying on our working hobby farm estate! You'll likely see our 4 mini Hi
 - Student & Family Visits: Guests are welcome to have visitors hang out, but only registered guests may stay overnight.
 - Quiet Hours: 11:00 PM – 7:00 AM.
 - Smoke-Free: This is a 100% non-smoking and non-vaping property.
-
-🍞 Fresh & Warm Monkey Bread!
-Let us know your estimated arrival time when you can! We love timing the delivery of our homemade monkey bread so it's fresh and warm right as you arrive.
 
 📱 Need Anything?
 We're right nearby if you need a hand during your stay:

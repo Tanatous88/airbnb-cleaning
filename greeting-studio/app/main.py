@@ -515,11 +515,18 @@ def update_stay(stay_id: int, body: StayUpdate):
                 raise HTTPException(status_code=400, detail=f"Status must be one of {VALID_STATUSES}")
             fields.append("status = ?")
             values.append(body.status)
+        before = get_stay_or_404(conn, stay_id)
         if fields:
             values.append(stay_id)
             conn.execute(f"UPDATE stays SET {', '.join(fields)} WHERE id = ?", values)
             conn.commit()
-        return {"ok": True}
+        # A fixed name or door code should show up on today's card right away,
+        # without the host having to click Rebuild (which re-syncs everything).
+        after = get_stay_or_404(conn, stay_id)
+        key_changed = any((before[c] or "") != (after[c] or "")
+                          for c in ("guest_name", "phone_last4", "confirmation_code"))
+        redrafted = queue_mod.redraft_cards_for_stay(conn, stay_id, redraft_ready=key_changed)
+        return {"ok": True, "redrafted": redrafted}
     finally:
         conn.close()
 
@@ -632,6 +639,7 @@ def draft_greeting(stay_id: int):
             merge_values=json.dumps(merge_values, indent=2),
             booking_message=context or "(empty)",
             host_signature=db.get_setting(conn, "host_signature", "— Your hosts"))
+        draft = queue_mod.strip_subject(draft)
         conn.execute(
             "UPDATE stays SET draft_greeting = ?, merge_values = ?, status = 'drafted' WHERE id = ?",
             (draft, json.dumps(merge_values), stay_id))
@@ -690,6 +698,10 @@ def mark_sent(stay_id: int, body: ApproveIn):
         conn.execute("INSERT INTO sent_greetings (stay_id, content, sent_at) VALUES (?, ?, ?)",
                      (stay_id, body.content, db.now()))
         conn.execute("UPDATE stays SET status = 'sent' WHERE id = ?", (stay_id,))
+        # The same welcome may also be waiting as a card on the dashboard.
+        conn.execute("UPDATE daily_queue SET status = 'sent', sent_at = ?, message = ?, error = '' "
+                     "WHERE stay_id = ? AND COALESCE(kind, 'arrival') = 'arrival' AND status != 'sent'",
+                     (db.now(), body.content, stay_id))
         conn.commit()
         return {"ok": True}
     finally:

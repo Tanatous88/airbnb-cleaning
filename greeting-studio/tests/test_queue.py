@@ -1,4 +1,5 @@
 """The morning queue: arrivals, name autofill, returning guests, mid-stay notes."""
+import os
 import pytest
 
 from app import browser_assist, db, queue
@@ -152,3 +153,73 @@ def test_same_day_setting(conn, env):
     tomorrow = add_stay(conn, "The Studio", "Pam Lee", 1, 3, phone="1234")
     queue.build_queue_for_today()
     assert _card(conn, tomorrow) is None
+
+
+def test_subject_line_never_reaches_guests(conn, env):
+    set_template(conn, "The Studio", "Subject: Welcome!\n\nHi {{guest_first_name}}! Code {{door_code}}.")
+    sid = add_stay(conn, "The Studio", "Pam Lee", 1, 3, phone="1234")
+    queue.build_queue_for_today()
+    assert _card(conn, sid)["message"] == "Hi Pam! Code 1234."
+    assert queue.strip_subject("Hi there\nSubject: not a header") == "Hi there\nSubject: not a header"
+
+
+def test_shipped_templates_have_no_subject_and_ask_arrival_early():
+    import glob
+    for path in glob.glob(os.path.join(os.path.dirname(queue.__file__), "..", "templates", "*.txt")):
+        text = open(path, encoding="utf-8").read()
+        assert not text.lower().startswith("subject:"), path
+        ask = text.index("estimated arrival time")
+        assert ask < text.index("📍"), f"{path}: arrival-time ask should come before the address"
+
+
+def test_prompt_forbids_new_sections_and_subject():
+    from app.claude import render_prompt
+    p = render_prompt("draft_greeting", unit_name="U", unit_profile="", template="T", guest_name="G",
+                      checkin_date="", checkout_date="", merge_values="{}", booking_message="",
+                      host_signature="")
+    assert "Do NOT add sections" in p and "no checkout details" in p
+    assert 'never start with a "Subject:" line' in p
+
+
+def test_saving_stay_redrafts_needs_setup_card(conn, env):
+    from fastapi.testclient import TestClient
+    from app import main
+    set_template(conn, "The Studio", TEMPLATE)
+    sid = add_stay(conn, "The Studio", queue.UNKNOWN_GUEST, 1, 3, phone="1234")
+    queue.build_queue_for_today()
+    assert _card(conn, sid)["status"] == "needs_setup"
+    calls = []
+    env_thread = browser_assist.read_thread
+    browser_assist.read_thread = lambda *a, **k: calls.append(a) or {"messages": [], "guest_name": ""}
+    try:
+        r = TestClient(main.app).put(f"/api/stays/{sid}", json={"guest_name": "Melissa Hart"})
+    finally:
+        browser_assist.read_thread = env_thread
+    assert r.json()["redrafted"] == ["ready"]
+    assert _card(conn, sid)["message"] == "Hi Melissa! Door code: 1234."
+    assert calls == []  # no Airbnb browser window for a quick fix
+
+
+def test_unrelated_save_keeps_hand_edited_ready_card(conn, env):
+    from fastapi.testclient import TestClient
+    from app import main
+    set_template(conn, "The Studio", TEMPLATE)
+    sid = add_stay(conn, "The Studio", "Pam Lee", 1, 3, phone="1234")
+    queue.build_queue_for_today()
+    conn.execute("UPDATE daily_queue SET message = 'my edit' WHERE stay_id = ?", (sid,))
+    conn.commit()
+    r = TestClient(main.app).put(f"/api/stays/{sid}", json={"guest_messages": "loved the goats"})
+    assert r.json()["redrafted"] == []
+    assert _card(conn, sid)["message"] == "my edit"
+    TestClient(main.app).put(f"/api/stays/{sid}", json={"phone_last4": "9999"})
+    assert _card(conn, sid)["message"] == "Hi Pam! Door code: 9999."
+
+
+def test_stay_page_sent_closes_dashboard_card(conn, env):
+    from fastapi.testclient import TestClient
+    from app import main
+    set_template(conn, "The Studio", TEMPLATE)
+    sid = add_stay(conn, "The Studio", "Pam Lee", 1, 3, phone="1234")
+    queue.build_queue_for_today()
+    TestClient(main.app).post(f"/api/stays/{sid}/mark-sent", json={"content": "Hi Pam!"})
+    assert _card(conn, sid)["status"] == "sent"

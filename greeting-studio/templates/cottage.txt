@@ -1,8 +1,9 @@
-Subject: Welcome to The Cottage! Check-in details & guest guide 🏡
-
 Hi {{guest_first_name}},
 
 We are so excited to host you at The Cottage! This restored 1930s Pioneer Hill home blends historic charm with modern comfort — just a short walk from downtown Pullman and WSU.
+
+🍞 What time will you arrive?
+Just reply with your estimated arrival time. We bake homemade monkey bread for every stay and love timing it so it's fresh and warm right as you get here.
 
 📍 Address & Arrival Instructions
 - Address: 510 SE High St, Pullman, WA 99163
@@ -29,9 +30,6 @@ We are so excited to host you at The Cottage! This restored 1930s Pioneer Hill h
 - Our Resident Outdoor Cat: You may spot a feral cat near the back door — please feel free to give her/him food (container near back door inside). It's not the cuddly type, but it counts on us all the same. If it hisses at you, consider that its own particular way of saying thanks.
 - Quiet Hours: 11:00 PM – 7:00 AM (please respect our Pioneer Hill neighbors).
 - Smoke-Free: This is a 100% non-smoking and non-vaping property, inside and out.
-
-🍞 Fresh & Warm Monkey Bread!
-Let us know your estimated arrival time when you can! We love timing the delivery of our homemade monkey bread so it's fresh and warm right as you arrive.
 
 📱 Need Anything?
 If you need dining tips for downtown or have questions during your stay, message us in the app or contact us directly:

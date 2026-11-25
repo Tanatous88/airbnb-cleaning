@@ -1,8 +1,9 @@
-Subject: Welcome to The Studio! Check-in details & music retreat tips 🎵
-
 Hi {{guest_first_name}},
 
 We are so excited to host you at The Studio! We've filled this lower-level 2-bedroom, 1.5-bath space with a custom music theme and plenty of entertainment to make your stay special.
+
+🍞 What time will you arrive?
+Just reply with your estimated arrival time. We bake homemade monkey bread for every stay and love timing it so it's fresh and warm right as you get here.
 
 📍 Address & Arrival Instructions
 - Address: 605 SW Walnut St, Pullman, WA 99163
@@ -28,9 +29,6 @@ We are so excited to host you at The Studio! We've filled this lower-level 2-bed
 - Student & Family Visits: Guests are welcome to have visitors hang out, but only registered guests may stay overnight.
 - Quiet Hours: 11:00 PM – 7:00 AM.
 - Smoke-Free: This is a 100% non-smoking and non-vaping property.
-
-🍞 Fresh & Warm Monkey Bread!
-Let us know your estimated arrival time when you can! We love timing the delivery of our homemade monkey bread so it's fresh and warm right as you arrive.
 
 📱 Need Anything?
 If you have questions about the tech, amenities, or local spots, feel free to message us in the app or contact us directly:

@@ -208,7 +208,7 @@ function renderQueueCard(q) {
     ${src ? `<p class="small" style="color:${src.color};margin:2px 0 6px">${src.icon} ${src.text}</p>` : ""}
     ${q.error ? `<p class="small" style="color:var(--red);margin:6px 0">${esc(q.error)}</p>` : ""}
     ${q.status === "needs_setup"
-      ? `<p class="muted small">Fix it (door code / guest name live on the stay; Wi-Fi on the unit's Amenities), then click Rebuild queue now.</p>
+      ? `<p class="muted small">Fix it (door code / guest name on the stay page; Wi-Fi on the unit's Amenities). Saving the stay redrafts this card.</p>
          <button class="secondary" onclick="openStay(${q.stay_id})">Open stay →</button>`
       : `<textarea id="q-msg-${q.id}" class="tall" ${editable ? "" : "readonly"}>${esc(q.message)}</textarea>
          <div class="row" style="margin-top:8px">
@@ -758,8 +758,11 @@ async function saveStayMsgs(stayId, btn) {
       phone_last4: $("#stay-phone4").value.trim(), confirmation_code: $("#stay-conf").value.trim() };
     const name = $("#stay-guest-name").value.trim();
     if (name) body.guest_name = name;
-    await api(`/api/stays/${stayId}`, { method: "PUT", body });
-    toast("Saved ✓");
+    const r = await api(`/api/stays/${stayId}`, { method: "PUT", body });
+    const re = (r && r.redrafted) || [];
+    if (!re.length) toast("Saved ✓");
+    else if (re.includes("needs_setup")) toast("Saved — today's card still needs something; check it on the Dashboard.", true);
+    else toast("Saved ✓ Today's card on the Dashboard was redrafted and is ready.");
     openStay(stayId);
   } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
 }

@@ -22,13 +22,13 @@ GUEST'S BOOKING MESSAGE (what they wrote when they booked; may be empty):
 ---
 
 Instructions:
-1. Follow the template's structure and include every core information block (entry, parking, WiFi, check-in time, quirks, contact, checkout). Substitute the merge field values exactly — do not alter codes, passwords, times, or dates.
+1. Follow the template's structure and keep every section it has, in the same order. Do NOT add sections, instructions or facts the template doesn't contain — no checkout details, house rules, times or amenities of your own. Substitute the merge field values exactly — do not alter codes, passwords, times, or dates.
 2. If the guest's booking message mentions a reason for their visit (a WSU game, a graduation, wanting to meet the animals, an anniversary, etc.), acknowledge it warmly and specifically near the top of the message — one or two sentences, natural and personal.
 3. If the booking message is empty or generic, keep the greeting warm but do not invent details about the guest.
 4. Friendly, personable host voice — never gushing, never generic, no exclamation-mark overload.
 5. If any merge field value is missing (shown as [MISSING]), leave the template's placeholder visible so the host notices before sending.
 6. If the template already contains a sign-off, keep it exactly as written and do NOT add another. Only if the template has no sign-off, close with: {{host_signature}}
-7. If the template starts with a "Subject:" line, keep it as the first line unchanged.
+7. Airbnb messages have no subject: never start with a "Subject:" line, even if the template has one.
 8. If a merge field's value is an empty string (not shown as [MISSING]), omit that entire line or section from the output — don't leave blank space, an empty header, or a stray line break where it would have gone.
 9. If the guest's booking message section starts with "RETURNING GUEST:", this guest has stayed with us before: open with one warm, natural "welcome back" sentence (mention the earlier place by name if it was a different unit). Never invent details about that earlier stay beyond what the line says. Don't include the "RETURNING GUEST:" line itself in the message.
 

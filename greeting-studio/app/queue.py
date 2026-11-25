@@ -104,6 +104,17 @@ def render_local(template: str, merge_values: dict) -> str:
 
 
 
+def strip_subject(text: str) -> str:
+    """Airbnb chat has no subject field, so a leading "Subject: ..." line
+    (from older templates) would show up literally in the guest's thread."""
+    lines = (text or "").lstrip("\n").split("\n")
+    if lines and lines[0].strip().lower().startswith("subject:"):
+        lines = lines[1:]
+        while lines and not lines[0].strip():
+            lines = lines[1:]
+    return "\n".join(lines)
+
+
 def missing_fields(template: str, merge_values: dict) -> list:
     """Merge fields the template actually uses that resolve to [MISSING]."""
     used = set(MERGE_FIELD_RE.findall(template))
@@ -279,7 +290,7 @@ def _personalize(conn, unit, stay, template: str, merge_values: dict, thread_con
     """Returns (message, note). Uses Claude only when there is guest context to
     respond to; otherwise a deterministic local render."""
     if not thread_context.strip():
-        return render_local(template, merge_values), ""
+        return strip_subject(render_local(template, merge_values)), ""
     model = db.get_setting(conn, "queue_model", "claude-haiku-4-5")
     prompt = render_prompt(
         "draft_greeting",
@@ -294,10 +305,10 @@ def _personalize(conn, unit, stay, template: str, merge_values: dict, thread_con
         host_signature=db.get_setting(conn, "host_signature", "— Your hosts"),
     )
     try:
-        return ask_claude(prompt, model=model), ""
+        return strip_subject(ask_claude(prompt, model=model)), ""
     except ClaudeError as e:
         # Fail soft at draft time: an un-personalized greeting is still correct.
-        return render_local(template, merge_values), f"personalization skipped ({e})"
+        return strip_subject(render_local(template, merge_values)), f"personalization skipped ({e})"
 
 
 # Section-header emoji used across every harmonized welcome template. A
@@ -486,7 +497,7 @@ def _setup_problems(missing: list, scrape_note: str = "") -> str:
                         " — door code / name go on the stay, Wi-Fi on the unit's Amenities form")
     if scrape_note:
         problems.append(scrape_note)
-    return "; ".join(problems) + ". Then click Rebuild."
+    return "; ".join(problems) + ". Fix it on the stay page and save; this card redrafts itself."
 
 
 def welcome_lead_days(conn) -> int:
@@ -509,38 +520,50 @@ def _build_arrivals(conn, today: str, force: bool, summary: dict) -> None:
         if _skip_existing(conn, stay["id"], today, force):
             summary["skipped"] += 1
             continue
-        unit = conn.execute("SELECT * FROM units WHERE id = ?", (stay["unit_id"],)).fetchone()
-        tpl = db.latest_template(conn, unit["id"])
-        source, message = "", ""
-        if tpl is None:
-            status, error = "needs_setup", f"{unit['name']} has no template yet."
-        else:
-            merge_values = build_merge_values(conn, unit, stay)
-            missing = missing_fields(tpl["content"], merge_values)
-            thread = None
-            if "guest_first_name" in missing and (stay["confirmation_code"] or "").strip():
-                # The thread often knows the name the calendar feed left out.
-                thread = read_thread_context(conn, stay)
-                stay = _reload_stay(conn, stay["id"])
-                merge_values = build_merge_values(conn, unit, stay)
-                missing = missing_fields(tpl["content"], merge_values)
-            if missing:
-                status = "needs_setup"
-                error = _setup_problems(missing, thread[2] if thread else "")
-            else:
-                context, source, scrape_note = thread or read_thread_context(conn, stay)
-                welcome_back = returning_note(prior_stays(conn, stay))
-                if welcome_back:
-                    context = (welcome_back + "\n" + context).strip()
-                message, note = _personalize(conn, unit, stay, tpl["content"], merge_values,
-                                             context)
-                status = "ready"
-                error = "; ".join(x for x in (scrape_note, note) if x)
-        _save_queue_item(conn, stay, today, "arrival", message, status, error, source)
+        status = _draft_arrival(conn, stay, today, live_thread=True)
         summary["queued"] += 1
         if status == "needs_setup":
             summary["needs_setup"] += 1
-        audit("draft", unit["name"], stay["guest_name"], status)
+
+
+def _draft_arrival(conn, stay, day: str, live_thread: bool) -> str:
+    """Draft (or redraft) one guest's welcome card for `day`. live_thread=False
+    skips opening Airbnb in the browser and uses only what's stored — used
+    when the host fixes a stay and the card should update right away."""
+    unit = conn.execute("SELECT * FROM units WHERE id = ?", (stay["unit_id"],)).fetchone()
+    tpl = db.latest_template(conn, unit["id"])
+    source, message = "", ""
+    if tpl is None:
+        status, error = "needs_setup", f"{unit['name']} has no template yet."
+    else:
+        merge_values = build_merge_values(conn, unit, stay)
+        missing = missing_fields(tpl["content"], merge_values)
+        thread = None
+        if live_thread and "guest_first_name" in missing \
+                and (stay["confirmation_code"] or "").strip():
+            # The thread often knows the name the calendar feed left out.
+            thread = read_thread_context(conn, stay)
+            stay = _reload_stay(conn, stay["id"])
+            merge_values = build_merge_values(conn, unit, stay)
+            missing = missing_fields(tpl["content"], merge_values)
+        if missing:
+            status = "needs_setup"
+            error = _setup_problems(missing, thread[2] if thread else "")
+        else:
+            if thread or live_thread:
+                context, source, scrape_note = thread or read_thread_context(conn, stay)
+            else:
+                context = (stay["booking_message"] or "").strip()
+                source, scrape_note = ("stored" if context else "none"), ""
+            welcome_back = returning_note(prior_stays(conn, stay))
+            if welcome_back:
+                context = (welcome_back + "\n" + context).strip()
+            message, note = _personalize(conn, unit, stay, tpl["content"], merge_values, context)
+            status = "ready"
+            error = "; ".join(x for x in (scrape_note, note) if x)
+    _save_queue_item(conn, stay, day, "arrival", message, status, error, source)
+    audit("draft", unit["name"], stay["guest_name"], status)
+    return status
 
 
 def _build_midstays(conn, today_date: date, force: bool, summary: dict) -> None:
@@ -560,19 +583,49 @@ def _build_midstays(conn, today_date: date, force: bool, summary: dict) -> None:
         if _skip_existing(conn, stay["id"], today, force):
             summary["skipped"] += 1
             continue
-        unit = conn.execute("SELECT * FROM units WHERE id = ?", (stay["unit_id"],)).fetchone()
-        merge_values = dict(build_merge_values(conn, unit, stay),
-                            unit_name=unit["name"], host_signature=signature)
-        missing = missing_fields(template, merge_values)
-        if missing:
-            status, message, error = "needs_setup", "", _setup_problems(missing)
-        else:
-            status, message, error = "ready", render_local(template, merge_values).strip(), ""
-        _save_queue_item(conn, stay, today, "midstay", message, status, error, "")
+        status = _draft_midstay(conn, stay, today, template, signature)
         summary["midstay"] += 1
         if status == "needs_setup":
             summary["needs_setup"] += 1
-        audit("draft_midstay", unit["name"], stay["guest_name"], status)
+
+
+def _draft_midstay(conn, stay, day: str, template: str, signature: str) -> str:
+    unit = conn.execute("SELECT * FROM units WHERE id = ?", (stay["unit_id"],)).fetchone()
+    merge_values = dict(build_merge_values(conn, unit, stay),
+                        unit_name=unit["name"], host_signature=signature)
+    missing = missing_fields(template, merge_values)
+    if missing:
+        status, message, error = "needs_setup", "", _setup_problems(missing)
+    else:
+        status, message, error = "ready", render_local(template, merge_values).strip(), ""
+    _save_queue_item(conn, stay, day, "midstay", message, status, error, "")
+    audit("draft_midstay", unit["name"], stay["guest_name"], status)
+    return status
+
+
+def redraft_cards_for_stay(conn, stay_id: int, redraft_ready: bool) -> list:
+    """After the host edits a stay: redraft today's unsent cards for it.
+    Cards needing setup are always redrafted; ready cards only when
+    redraft_ready (name or door code changed), so hand edits on a card
+    aren't thrown away for an unrelated save. Returns the new statuses."""
+    today = date.today().isoformat()
+    rows = conn.execute(
+        "SELECT * FROM daily_queue WHERE stay_id = ? AND checkin_date = ? AND status != 'sent'",
+        (stay_id, today)).fetchall()
+    stay = _reload_stay(conn, stay_id)
+    out = []
+    for row in rows:
+        if row["status"] != "needs_setup" and not redraft_ready:
+            continue
+        if (row["kind"] or "arrival") == "midstay":
+            out.append(_draft_midstay(
+                conn, stay, today,
+                db.get_setting(conn, "midstay_template", db.DEFAULT_MIDSTAY_TEMPLATE),
+                db.get_setting(conn, "host_signature", "— Your hosts")))
+        else:
+            out.append(_draft_arrival(conn, stay, today, live_thread=False))
+    conn.commit()
+    return out
 
 
 def build_queue_for_today(force: bool = False) -> dict:
