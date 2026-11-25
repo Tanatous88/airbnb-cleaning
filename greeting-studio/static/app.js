@@ -41,13 +41,50 @@ $("#modal-backdrop").addEventListener("click", e => {
   if (e.target.id === "modal-backdrop") closeModal();
 });
 
-async function copyText(text) {
-  try {
-    await navigator.clipboard.writeText(text);
-    toast("Copied to clipboard ✓");
-  } catch (e) {
-    toast("Clipboard blocked — select and copy manually", true);
+/* Copy & paste mode (Settings): the host pastes messages into Airbnb
+   themselves, so automated Send / fill-only buttons are hidden. */
+let manualMode = true;
+
+function legacyCopy(text) {
+  // navigator.clipboard only exists on https or localhost. Opened from a
+  // phone at http://<PC's IP>:8321 it's missing, so fall back to the old
+  // select-and-copy command, which works anywhere inside a click.
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.cssText = "position:fixed;top:0;left:0;opacity:0;font-size:16px";
+  document.body.appendChild(ta);
+  ta.select();
+  ta.setSelectionRange(0, text.length);
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+  ta.remove();
+  return ok;
+}
+
+function copyText(text, quiet = false) {
+  // Starts copying immediately (still inside the click), so a window.open
+  // right after it isn't treated as a pop-up. Resolves to true on success.
+  const done = ok => {
+    if (!quiet) toast(ok ? "Copied to clipboard ✓" : "Couldn't copy — select the text and copy it yourself", !ok);
+    return ok;
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text).then(() => done(true), () => done(legacyCopy(text)));
   }
+  return Promise.resolve(done(legacyCopy(text)));
+}
+
+function openAirbnb(url) {
+  // Must be called directly in the click handler, before any await —
+  // otherwise Chrome treats the new tab as a blocked pop-up.
+  window.open(url || "https://www.airbnb.com/hosting/inbox", "_blank", "noopener");
+}
+
+function reservationUrl(code) {
+  code = (code || "").trim();
+  return code ? `https://www.airbnb.com/hosting/reservations/details/${encodeURIComponent(code)}`
+              : "https://www.airbnb.com/hosting/inbox";
 }
 
 function busy(btn, on) {
@@ -81,10 +118,11 @@ async function renderDashboard() {
   main.innerHTML = `<div class="muted">Loading…</div>`;
   const [dash, units, queue] = await Promise.all([
     api("/api/dashboard"), api("/api/units"), api("/api/queue")]);
+  manualMode = queue.manual_mode !== false;
   const noTemplates = units.filter(u => !u.template_version).map(u => u.name);
   let html = "";
 
-  if (queue.session_expired) {
+  if (queue.session_expired && !manualMode) {
     html += `<div class="contradiction" style="border-left-color:var(--red);background:#fdecea">
       <b>Airbnb session expired</b> — the send automation can't log in. Click "Browser assist" on any
       draft to open a window and log in to Airbnb again, then retry.</div>`;
@@ -95,7 +133,9 @@ async function renderDashboard() {
   html += `<h2>Today's Arrivals ${arrivals.length ? `<span class="badge ${arrivals.some(i => i.status === "needs_setup") ? "due" : "reviewed"}">${arrivals.filter(i => i.status !== "sent").length} pending</span>` : ""}
     <button class="secondary small" style="float:right" onclick="runQueue(this)">↻ Rebuild queue now</button></h2>`;
   html += `<p class="muted small">Drafts are generated automatically every morning at 7:00 AM Pacific
-    (and on app start if the 7 AM run was missed). Nothing sends without your Send click.
+    (and on app start if the 7 AM run was missed). ${manualMode
+      ? "For each one: <b>Copy &amp; open in Airbnb</b>, paste it into the guest's message thread and send it there, then click <b>I sent it</b>."
+      : "Nothing sends without your Send click."}
     ${queue.last_run ? `Last run: ${esc(queue.last_run.replace("T", " ").slice(0, 16))} UTC.` : "No run yet today."}</p>`;
   html += arrivals.length ? arrivals.map(renderQueueCard).join("")
                           : `<div class="card muted small">No check-ins today.</div>`;
@@ -114,7 +154,8 @@ async function renderDashboard() {
       const left = r.days_left <= 0 ? "last day!" : `${r.days_left} day${r.days_left === 1 ? "" : "s"}`;
       html += `<tr><td>${esc(r.guest_name)}</td><td>${esc(r.unit_name)}</td><td>${esc(r.checkout_date)}</td>
         <td><span class="badge ${r.days_left <= 3 ? "due" : "pending"}">${left}</span></td>
-        <td>${r.has_drafts ? '<span class="badge reviewed">drafts ready</span> ' : ""}<button class="ghost" onclick="openStay(${r.stay_id})">Open →</button></td></tr>`;
+        <td>${r.has_drafts ? '<span class="badge reviewed">drafts ready</span> ' : ""}<button class="ghost" onclick="openStay(${r.stay_id})">Open →</button>
+          <button class="ghost" onclick="markReviewPostedFromDashboard(${r.stay_id}, this)" title="Already posted it on Airbnb">✓ Posted</button></td></tr>`;
     }
     html += `</tbody></table></div>`;
   }
@@ -169,12 +210,46 @@ function renderQueueCard(q) {
       : `<textarea id="q-msg-${q.id}" class="tall" ${editable ? "" : "readonly"}>${esc(q.message)}</textarea>
          <div class="row" style="margin-top:8px">
            ${q.status === "sent"
-             ? `<span class="muted small">Sent ${esc((q.sent_at || "").replace("T", " ").slice(0, 16))} UTC — logged.</span>`
-             : `<button onclick="sendQueueItem(${q.id}, this)">${q.status === "failed" ? "Retry send" : "Send"}</button>
-                <button class="secondary" onclick="saveQueueEdit(${q.id}, this)">Save edit</button>
-                <button class="secondary" onclick="queueAssist(${q.id})">Browser assist (fill only)</button>`}
+             ? `<span class="muted small">Sent ${esc((q.sent_at || "").replace("T", " ").slice(0, 16))} UTC — logged.</span>
+                <button class="ghost" onclick="undoQueueSent(${q.id}, this)">Undo</button>`
+             : `<button onclick="copyAndOpenQueue(${q.id}, '${esc(q.airbnb_url || "")}', this)">📋 Copy &amp; open in Airbnb</button>
+                <button class="secondary" onclick="markQueueSent(${q.id}, this)">✓ I sent it</button>
+                <button class="ghost" onclick="copyText($('#q-msg-${q.id}').value)">Copy only</button>
+                <button class="ghost" onclick="saveQueueEdit(${q.id}, this)">Save edit</button>
+                ${manualMode ? "" : `
+                <button class="secondary" onclick="sendQueueItem(${q.id}, this)">${q.status === "failed" ? "Retry auto-send" : "Auto-send"}</button>
+                <button class="ghost" onclick="queueAssist(${q.id})">Browser assist (fill only)</button>`}`}
          </div>`}
   </div>`;
+}
+
+function copyAndOpenQueue(id, url, btn) {
+  const text = $(`#q-msg-${id}`).value;
+  copyText(text, true).then(ok => {
+    toast(ok ? "Copied ✓ — paste it into the guest's message thread and send. Then click \"I sent it\"."
+             : "Couldn't copy — select the text and copy it yourself", !ok);
+  });
+  openAirbnb(url);
+  // keep any edits made on the card
+  api(`/api/queue/${id}`, { method: "PUT", body: { message: text } }).catch(() => {});
+}
+
+async function markQueueSent(id, btn) {
+  busy(btn, true);
+  try {
+    await api(`/api/queue/${id}/mark-sent`, { method: "POST", body: { message: $(`#q-msg-${id}`).value } });
+    toast("Marked as sent ✓");
+    renderDashboard();
+  } catch (e) { toast(e.message, true); busy(btn, false); }
+}
+
+async function undoQueueSent(id, btn) {
+  busy(btn, true);
+  try {
+    await api(`/api/queue/${id}/undo-sent`, { method: "POST" });
+    toast("Back to ready");
+    renderDashboard();
+  } catch (e) { toast(e.message, true); busy(btn, false); }
 }
 
 async function runQueue(btn) {
@@ -533,6 +608,7 @@ async function deleteStay(id) {
 }
 
 let currentStayId = null;
+let currentStayCode = "";
 
 async function openStay(stayId) {
   currentStayId = stayId;
@@ -540,6 +616,7 @@ async function openStay(stayId) {
   const stays = await api("/api/stays");
   const s = stays.find(x => x.id === stayId);
   if (!s) { toast("Stay not found", true); return renderStays(); }
+  currentStayCode = s.confirmation_code || "";
   const reviews = await api(`/api/stays/${stayId}/reviews`);
 
   main.innerHTML = `
@@ -602,9 +679,9 @@ function renderDraftArea(s, extra = {}) {
     </div>
     ${extra.template ? `<h3>Merge-field values used</h3><table class="merge-table">${mvRows}</table>` : ""}
     <div class="row" style="margin-top:10px">
-      <button onclick="approveAndCopy(${s.id}, this)">✓ Approve → Copy + open Airbnb</button>
-      <button class="secondary" onclick="assistFill(${s.id}, this)">🤖 Browser assist (fills, never sends)</button>
-      <button class="secondary" onclick="markSent(${s.id}, this)">Mark as sent &amp; log</button>
+      <button onclick="approveAndCopy(${s.id}, this)">📋 Copy &amp; open in Airbnb</button>
+      <button class="secondary" onclick="markSent(${s.id}, this)">✓ I sent it</button>
+      ${manualMode ? "" : `<button class="ghost" onclick="assistFill(${s.id}, this)">🤖 Browser assist (fills, never sends)</button>`}
     </div>`;
 }
 
@@ -628,14 +705,18 @@ async function draftGreeting(stayId, btn) {
 }
 
 async function approveAndCopy(stayId, btn) {
+  const content = $("#draft-text").value;
+  if (!content.trim()) return toast("The draft is empty", true);
+  // Copy and open the tab first, while still inside the click — doing it
+  // after a server round-trip made Chrome block the new tab as a pop-up.
+  const copied = copyText(content, true);
+  openAirbnb(reservationUrl(currentStayCode));
   busy(btn, true);
   try {
-    const content = $("#draft-text").value;
-    const r = await api(`/api/stays/${stayId}/approve`, { method: "POST", body: { content } });
-    await copyText(content);
-    const url = r.links.reservation || r.links.inbox;
-    window.open(url, "_blank");
-    toast("Approved ✓ Copied to clipboard — paste into the Airbnb thread and hit send.");
+    await api(`/api/stays/${stayId}/approve`, { method: "POST", body: { content } });
+    const ok = await copied;
+    toast(ok ? "Copied ✓ — paste it into the guest's message thread and send. Then click \"I sent it\"."
+             : "Couldn't copy — select the text and copy it yourself", !ok);
   } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
 }
 
@@ -678,12 +759,30 @@ function renderReview(r) {
     <div class="row" style="justify-content:space-between">
       <b>${HUMOR_LABELS[r.humor_level] || r.humor_level}</b>
       <span>
-        <button class="ghost" onclick="copyText(document.getElementById('rev-${r.humor_level}').value)">Copy</button>
-        <button class="secondary" onclick="reviewAssist(document.getElementById('rev-${r.humor_level}').value, this)" title="Opens Airbnb's review form and fills this text in. You pick the stars and press Submit.">Open in Airbnb (fill only)</button>
+        <button class="secondary" onclick="copyAndOpenReview('rev-${r.humor_level}')" title="Copies this review and opens the reservation — click Leave a review there and paste it">📋 Copy &amp; open in Airbnb</button>
+        <button class="ghost" onclick="copyText(document.getElementById('rev-${r.humor_level}').value)">Copy only</button>
+        ${manualMode ? "" : `<button class="ghost" onclick="reviewAssist(document.getElementById('rev-${r.humor_level}').value, this)" title="Opens Airbnb's review form and fills this text in. You pick the stars and press Submit.">Fill in Airbnb (auto)</button>`}
       </span>
     </div>
     <textarea id="rev-${r.humor_level}">${esc(r.content)}</textarea>
   </div>`;
+}
+
+function copyAndOpenReview(textareaId) {
+  copyText(document.getElementById(textareaId).value, true).then(ok => {
+    toast(ok ? "Copied ✓ — on the reservation, click Leave a review and paste it. Then click \"Mark review posted\"."
+             : "Couldn't copy — select the text and copy it yourself", !ok);
+  });
+  openAirbnb(reservationUrl(currentStayCode));
+}
+
+async function markReviewPostedFromDashboard(stayId, btn) {
+  busy(btn, true);
+  try {
+    await api(`/api/stays/${stayId}/review-posted`, { method: "POST", body: { posted: true } });
+    toast("Marked as posted ✓");
+    renderDashboard();
+  } catch (e) { toast(e.message, true); busy(btn, false); }
 }
 
 async function markReviewPosted(stayId, posted, btn) {
@@ -911,11 +1010,17 @@ async function renderSettings() {
     </div>
   </div>
   <div class="card">
+    <h3>How you send messages</h3>
+    <label><input type="checkbox" id="set-manual-mode" ${s.manual_mode ? "checked" : ""}>
+      Copy &amp; paste mode — I paste messages and reviews into Airbnb myself
+      <span class="muted">(hides Auto-send, Browser assist and the Airbnb-login banner; the Copy &amp; open and I sent it buttons stay)</span></label>
+  </div>
+  <div class="card">
     <h3>Automatic drafts</h3>
     <label><input type="checkbox" id="set-auto-reviews" ${s.auto_reviews_enabled ? "checked" : ""}>
       Draft guest reviews automatically the morning after checkout <span class="muted">(never posted — they wait on the stay page)</span></label>
     <label><input type="checkbox" id="set-midstay" ${s.midstay_enabled ? "checked" : ""}>
-      Queue a mid-stay check-in message the day after arrival (stays of 2+ nights; still needs your Send click)</label>
+      Queue a mid-stay check-in message the day after arrival (stays of 2+ nights; nothing goes out until you send it)</label>
     <label>Mid-stay message <span class="muted">(merge fields: {{guest_first_name}}, {{unit_name}}, {{host_signature}})</span></label>
     <textarea id="set-midstay-template">${esc(s.midstay_template || "")}</textarea>
   </div>
@@ -953,11 +1058,13 @@ async function saveSettings(btn) {
       core_items: core, listing_aliases: aliases,
       hosting_ics_url: $("#set-hosting-ics").value.trim(),
       auto_reviews_enabled: $("#set-auto-reviews").checked,
+      manual_mode: $("#set-manual-mode").checked,
       midstay_enabled: $("#set-midstay").checked,
       midstay_template: $("#set-midstay-template").value };
     const key = $("#set-key").value.trim();
     if (key) body.api_key = key;
     await api("/api/settings", { method: "PUT", body });
+    manualMode = body.manual_mode;
     toast("Settings saved ✓"); renderSettings();
   } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
 }

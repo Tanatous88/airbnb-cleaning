@@ -646,11 +646,22 @@ class ApproveIn(BaseModel):
     content: str
 
 
+AIRBNB_INBOX_URL = "https://www.airbnb.com/hosting/inbox"
+
+
+def reservation_url(code: str) -> str:
+    """The guest's reservation page (its Message button opens the thread),
+    or the inbox when the stay has no confirmation code."""
+    code = (code or "").strip()
+    return (f"https://www.airbnb.com/hosting/reservations/details/{code}"
+            if code else AIRBNB_INBOX_URL)
+
+
 def airbnb_links(stay) -> dict:
-    links = {"inbox": "https://www.airbnb.com/hosting/inbox"}
+    links = {"inbox": AIRBNB_INBOX_URL}
     code = (stay["confirmation_code"] or "").strip()
     if code:
-        links["reservation"] = f"https://www.airbnb.com/hosting/reservations/details/{code}"
+        links["reservation"] = reservation_url(code)
     return links
 
 
@@ -973,9 +984,15 @@ def get_queue():
             "SELECT q.*, u.name AS unit_name FROM daily_queue q JOIN units u ON u.id = q.unit_id "
             "WHERE q.checkin_date = ? ORDER BY q.status = 'sent', u.name", (today,)).fetchall()
         summary_raw = db.get_setting(conn, "queue_last_summary", "")
+        items = []
+        for r in rows:
+            item = dict(r)
+            item["airbnb_url"] = reservation_url(r["thread_ref"])
+            items.append(item)
         return {
             "today": today,
-            "items": [dict(r) for r in rows],
+            "items": items,
+            "manual_mode": db.get_setting(conn, "manual_mode", "1") == "1",
             "last_run": db.get_setting(conn, "queue_last_run", ""),
             "last_summary": json.loads(summary_raw) if summary_raw else None,
             "session_expired": db.get_setting(conn, "airbnb_session_expired", "") == "1",
@@ -1003,6 +1020,73 @@ def edit_queue_item(item_id: int, body: QueueEdit):
             raise HTTPException(status_code=404, detail="Queue item not found")
         conn.execute("UPDATE daily_queue SET message = ? WHERE id = ?", (body.message, item_id))
         conn.commit()
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+def _record_queue_sent(conn, row, message: str, how: str) -> None:
+    """Mark a queue card sent and log the text on the stay. `how` is
+    'sent' (automation submitted it) or 'marked_sent' (host pasted it)."""
+    conn.execute("UPDATE daily_queue SET status='sent', error='', message=?, sent_at=? "
+                 "WHERE id=?", (message, db.now(), row["id"]))
+    # Logged with the greetings so the thread scraper recognises it as the
+    # host's own text and never mistakes it for something the guest said.
+    conn.execute("INSERT INTO sent_greetings (stay_id, content, sent_at) VALUES (?, ?, ?)",
+                 (row["stay_id"], message, db.now()))
+    kind = row["kind"] or "arrival"
+    if kind == "arrival":
+        conn.execute("UPDATE stays SET status='sent' WHERE id=?", (row["stay_id"],))
+    conn.commit()
+    queue_mod.audit(how if kind == "arrival" else f"{how}_{kind}",
+                    row["unit_name"], row["guest_name"], "ok")
+
+
+def _queue_row_or_404(conn, item_id: int):
+    row = conn.execute(
+        "SELECT q.*, u.name AS unit_name FROM daily_queue q JOIN units u ON u.id = q.unit_id "
+        "WHERE q.id = ?", (item_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Queue item not found")
+    return row
+
+
+@app.post("/api/queue/{item_id}/mark-sent")
+def mark_queue_sent(item_id: int, body: QueueEdit):
+    """Copy & paste mode: the host pasted the message into Airbnb themselves
+    and clicked "I sent it". Records it exactly like an automated send."""
+    if not body.message.strip():
+        raise HTTPException(status_code=400, detail="Message is empty")
+    conn = db.connect()
+    try:
+        row = _queue_row_or_404(conn, item_id)
+        if row["status"] == "sent":
+            return {"ok": True}
+        _record_queue_sent(conn, row, body.message, "marked_sent")
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+@app.post("/api/queue/{item_id}/undo-sent")
+def undo_queue_sent(item_id: int):
+    """For an accidental "I sent it" click."""
+    conn = db.connect()
+    try:
+        row = _queue_row_or_404(conn, item_id)
+        if row["status"] != "sent":
+            return {"ok": True}
+        last = conn.execute(
+            "SELECT id FROM sent_greetings WHERE stay_id = ? AND content = ? "
+            "ORDER BY id DESC LIMIT 1", (row["stay_id"], row["message"])).fetchone()
+        if last:
+            conn.execute("DELETE FROM sent_greetings WHERE id = ?", (last["id"],))
+        conn.execute("UPDATE daily_queue SET status='ready', sent_at='' WHERE id=?", (item_id,))
+        if (row["kind"] or "arrival") == "arrival":
+            conn.execute("UPDATE stays SET status='drafted' WHERE id=? AND status='sent'",
+                         (row["stay_id"],))
+        conn.commit()
+        queue_mod.audit("unmarked_sent", row["unit_name"], row["guest_name"], "")
         return {"ok": True}
     finally:
         conn.close()
@@ -1051,18 +1135,7 @@ def send_queue_item(item_id: int, body: QueueEdit):
             raise HTTPException(status_code=502, detail=str(e))
 
         db.set_setting(conn, "airbnb_session_expired", "")
-        conn.execute("UPDATE daily_queue SET status='sent', error='', message=?, sent_at=? "
-                     "WHERE id=?", (body.message, db.now(), item_id))
-        # Logged with the greetings so the thread scraper recognises it as the
-        # host's own text and never mistakes it for something the guest said.
-        conn.execute("INSERT INTO sent_greetings (stay_id, content, sent_at) VALUES (?, ?, ?)",
-                     (row["stay_id"], body.message, db.now()))
-        kind = row["kind"] or "arrival"
-        if kind == "arrival":
-            conn.execute("UPDATE stays SET status='sent' WHERE id=?", (row["stay_id"],))
-        conn.commit()
-        queue_mod.audit("sent" if kind == "arrival" else f"sent_{kind}",
-                        row["unit_name"], row["guest_name"], "ok")
+        _record_queue_sent(conn, row, body.message, "sent")
         return {"ok": True, "detail": detail}
     finally:
         conn.close()
@@ -1162,6 +1235,7 @@ class SettingsIn(BaseModel):
     midstay_enabled: Optional[bool] = None
     midstay_template: Optional[str] = None
     auto_reviews_enabled: Optional[bool] = None
+    manual_mode: Optional[bool] = None
 
 
 @app.get("/api/settings")
@@ -1183,6 +1257,7 @@ def get_settings():
             "midstay_template": db.get_setting(conn, "midstay_template",
                                                db.DEFAULT_MIDSTAY_TEMPLATE),
             "auto_reviews_enabled": db.get_setting(conn, "auto_reviews_enabled", "1") == "1",
+            "manual_mode": db.get_setting(conn, "manual_mode", "1") == "1",
         }
     finally:
         conn.close()
@@ -1197,7 +1272,7 @@ def update_settings(body: SettingsIn):
             val = getattr(body, key)
             if val is not None:
                 db.set_setting(conn, key, val)
-        for key in ("midstay_enabled", "auto_reviews_enabled"):
+        for key in ("midstay_enabled", "auto_reviews_enabled", "manual_mode"):
             val = getattr(body, key)
             if val is not None:
                 db.set_setting(conn, key, "1" if val else "0")

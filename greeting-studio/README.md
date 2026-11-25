@@ -128,7 +128,18 @@ Like everything else, it only goes out when you click Send.
   guest: editable draft + a single **Send** button. A desktop notification summarizes
   the morning run.
 
-**Send** is the only human gate — clicking it is your approval. It drives the
+**Copy & paste mode** (on by default; Settings → How you send messages). Each card has
+**📋 Copy & open in Airbnb**, which copies the message (including your edits) and opens
+that guest's reservation in a new tab. Paste it into the message thread and send it there,
+then click **✓ I sent it** on the card. That logs it, clears "Greeting due", and **Undo**
+reverses an accidental click. Reviews work the same way: **Copy & open in Airbnb** on a
+variant, click *Leave a review* on the reservation and paste, then **✓ Posted** (on the
+dashboard's Reviews due list) or **Mark review posted** (on the stay page). Copying also
+works when the app is opened from a phone at `http://<PC's IP>:8321`.
+
+With copy & paste mode off, the cards also show **Auto-send**, described below.
+
+**Auto-send** is the only human gate — clicking it is your approval. It drives the
 persistent Playwright browser (same `.pw-profile/` login you use for the fill-only
 assist) to open the reservation thread, paste the message, and submit it. On
 success the row is marked sent and logged to the stay's history; on failure

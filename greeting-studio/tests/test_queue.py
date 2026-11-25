@@ -113,3 +113,12 @@ def test_rebuild_is_idempotent(conn, env):
     assert second["skipped"] == 2
     queue.build_queue_for_today(force=True)
     assert conn.execute("SELECT COUNT(*) FROM daily_queue").fetchone()[0] == 2
+
+
+def test_browser_error_is_one_readable_line():
+    err = RuntimeError("BrowserType.launch_persistent_context: Executable doesn't exist at /x/chrome\n"
+                       "╔════════════╗\n║ Looks like Playwright was just installed ║\n╚════╝")
+    assert queue._short_reason(err) == ("the automated browser isn't installed: "
+                                        "run 'playwright install chromium'")
+    other = RuntimeError("Page.goto: net::ERR_INTERNET_DISCONNECTED at https://www.airbnb.com\n╔══╗")
+    assert queue._short_reason(other) == "net::ERR_INTERNET_DISCONNECTED at https://www.airbnb.com"

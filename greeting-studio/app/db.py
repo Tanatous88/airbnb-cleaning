@@ -275,6 +275,9 @@ def init_db() -> None:
         "midstay_enabled": "1",
         "midstay_template": DEFAULT_MIDSTAY_TEMPLATE,
         "auto_reviews_enabled": "1",
+        # Copy & paste mode: the host pastes messages into Airbnb themselves,
+        # so the automated Send / fill-only buttons are hidden by default.
+        "manual_mode": "1",
     }
     for k, v in defaults.items():
         conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, v))

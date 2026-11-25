@@ -383,6 +383,16 @@ def returning_note(prior: list) -> str:
             + ". Welcome them back warmly in one natural sentence near the top.")
 
 
+def _short_reason(e: Exception) -> str:
+    """One readable line from a browser error. Playwright appends a box of
+    ASCII art after the first line; keep only the part a person can use."""
+    first = (str(e).strip().splitlines() or [type(e).__name__])[0]
+    first = first.split(": ", 1)[-1] if first.startswith(("BrowserType.", "Page.")) else first
+    if "Executable doesn't exist" in first:
+        return "the automated browser isn't installed: run 'playwright install chromium'"
+    return " ".join(first.split())[:160]
+
+
 def read_thread_context(conn, stay):
     """Best-effort: read the GUEST's messages from the Airbnb thread via the
     persistent Playwright profile, filtering out anything that looks like the
@@ -409,8 +419,8 @@ def read_thread_context(conn, stay):
         from .browser_assist import read_thread
         thread = read_thread(code)
     except Exception as e:
-        reason = " ".join(str(e).split())[:200]  # one line, no ASCII-art tool output
-        note = f"couldn't read the Airbnb thread ({reason})"
+        note = "couldn't read the Airbnb thread, so this is the plain template (" \
+            + _short_reason(e) + ")"
         return stored, ("stored" if stored else "none"), note
     scraped = thread.get("messages") or []
     found_name = (thread.get("guest_name") or "").strip()
