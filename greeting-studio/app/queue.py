@@ -16,7 +16,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import urllib.request
 
-from . import db, parsers
+from . import db, parsers, safety
 from .claude import ClaudeError, ask_claude, render_prompt
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -451,8 +451,26 @@ def read_thread_context(conn, stay):
     return stored, ("stored" if stored else "none"), ""
 
 
+def trusted_texts(conn, template: str, merge_values: dict) -> list:
+    """Text the host wrote or configured: contact details in a draft that
+    appear in none of these are flagged (see safety.py)."""
+    return [render_local(template, merge_values),
+            db.get_setting(conn, "host_signature", ""),
+            db.get_setting(conn, "weekend_guide_url", "") or WEEKEND_GUIDE_URL,
+            "https://www.airbnb.com"]
+
+
+def draft_warning(conn, unit, stay, message: str) -> str:
+    """Warning for a welcome draft (or a host's edit of one), '' if clean."""
+    tpl = db.latest_template(conn, unit["id"])
+    if tpl is None or not message:
+        return ""
+    trusted = trusted_texts(conn, tpl["content"], build_merge_values(conn, unit, stay))
+    return safety.warning_text(safety.unexpected(message, *trusted))
+
+
 def _save_queue_item(conn, stay, day: str, kind: str, message: str, status: str,
-                     error: str, source: str) -> None:
+                     error: str, source: str, warning: str = "") -> None:
     """Insert or update the one queue row for (stay, day). The DB's unique
     index on (stay_id, checkin_date) guards against concurrent builds racing;
     if another build won, update its row instead of crashing."""
@@ -463,10 +481,10 @@ def _save_queue_item(conn, stay, day: str, kind: str, message: str, status: str,
         try:
             conn.execute(
                 "INSERT INTO daily_queue (stay_id, unit_id, guest_name, checkin_date, kind, "
-                "message, status, error, thread_ref, personalization_source, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "message, status, error, thread_ref, personalization_source, warning, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (stay["id"], stay["unit_id"], stay["guest_name"], day, kind, message, status,
-                 error, code, source, db.now()))
+                 error, code, source, warning, db.now()))
             return
         except sqlite3.IntegrityError:
             row = conn.execute("SELECT id FROM daily_queue WHERE stay_id = ? AND checkin_date = ?",
@@ -475,8 +493,9 @@ def _save_queue_item(conn, stay, day: str, kind: str, message: str, status: str,
                 raise
     conn.execute(
         "UPDATE daily_queue SET guest_name=?, kind=?, message=?, status=?, error=?, thread_ref=?, "
-        "personalization_source=?, created_at=? WHERE id=?",
-        (stay["guest_name"], kind, message, status, error, code, source, db.now(), row["id"]))
+        "personalization_source=?, warning=?, created_at=? WHERE id=?",
+        (stay["guest_name"], kind, message, status, error, code, source, warning, db.now(),
+         row["id"]))
 
 
 def _skip_existing(conn, stay_id: int, day: str, force: bool) -> bool:
@@ -535,7 +554,7 @@ def _draft_arrival(conn, stay, day: str, live_thread: bool) -> str:
     when the host fixes a stay and the card should update right away."""
     unit = conn.execute("SELECT * FROM units WHERE id = ?", (stay["unit_id"],)).fetchone()
     tpl = db.latest_template(conn, unit["id"])
-    source, message = "", ""
+    source, message, warning = "", "", ""
     if tpl is None:
         status, error = "needs_setup", f"{unit['name']} has no template yet."
     else:
@@ -564,7 +583,9 @@ def _draft_arrival(conn, stay, day: str, live_thread: bool) -> str:
             message, note = _personalize(conn, unit, stay, tpl["content"], merge_values, context)
             status = "ready"
             error = "; ".join(x for x in (scrape_note, note) if x)
-    _save_queue_item(conn, stay, day, "arrival", message, status, error, source)
+            warning = safety.warning_text(safety.unexpected(
+                message, *trusted_texts(conn, tpl["content"], merge_values)))
+    _save_queue_item(conn, stay, day, "arrival", message, status, error, source, warning)
     audit("draft", unit["name"], stay["guest_name"], status)
     return status
 

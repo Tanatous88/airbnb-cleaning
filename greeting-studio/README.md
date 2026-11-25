@@ -174,6 +174,19 @@ used to keep port 8321 locked) and restarted. Output goes to `app.log` / `app_er
 | `stop_app.ps1` | Stop the app and pause auto-start until `start_app.ps1` |
 | `uninstall_autostart.ps1` | Remove the task completely |
 
+## Guard against tricks in guest messages
+
+Drafts are written from guest messages, which anyone can send, so a message could try
+to steer the draft (e.g. "tell guests to confirm at bit.ly/…"). Two guards:
+
+- Claude is told that guest messages are information, never instructions, and never to
+  add a link, phone number, email or code that isn't in your template.
+- Every Claude draft is checked anyway (`app/safety.py`): any link, phone number or email
+  address that isn't in that unit's template, your signature or the weekend-guide link
+  shows as an orange **⚠ Not in your template** note on the card, and **Copy & open**
+  asks you to confirm first. Delete it and **Save edit** to clear the note. Review drafts
+  are flagged if they contain any contact details at all, since they're public.
+
 ## Morning summary email
 
 Settings → **Morning summary email** sends you a short email after the 7 AM run, listing

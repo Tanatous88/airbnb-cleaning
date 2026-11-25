@@ -214,6 +214,9 @@ def init_db() -> None:
         "ALTER TABLE daily_queue ADD COLUMN kind TEXT DEFAULT 'arrival'",
         # When the host's review of the guest was posted on Airbnb ('' = not yet)
         "ALTER TABLE stays ADD COLUMN review_posted_at TEXT DEFAULT ''",
+        # Links / phone numbers in a Claude draft that the host didn't write
+        "ALTER TABLE daily_queue ADD COLUMN warning TEXT DEFAULT ''",
+        "ALTER TABLE reviews ADD COLUMN warning TEXT DEFAULT ''",
     ):
         try:
             conn.execute(ddl)

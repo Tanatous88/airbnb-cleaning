@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import audit as audit_mod
-from . import db, maintenance, notify, parsers
+from . import db, maintenance, notify, parsers, safety
 from . import queue as queue_mod
 from .claude import ClaudeError, ask_claude, render_prompt, set_api_key
 from .queue import build_merge_values, read_thread_context
@@ -644,7 +644,10 @@ def draft_greeting(stay_id: int):
             "UPDATE stays SET draft_greeting = ?, merge_values = ?, status = 'drafted' WHERE id = ?",
             (draft, json.dumps(merge_values), stay_id))
         conn.commit()
+        warning = safety.warning_text(safety.unexpected(
+            draft, *queue_mod.trusted_texts(conn, tpl["content"], merge_values)))
         return {"draft": draft, "template": tpl["content"], "merge_values": merge_values,
+                "warning": warning,
                 "missing_values": [k for k, v in merge_values.items() if v == "[MISSING]"]}
     finally:
         conn.close()
@@ -848,13 +851,18 @@ def draft_reviews_for_stay(conn, stay, model: Optional[str] = None) -> dict:
             humor_level=label,
             seasonal_note=seasonal_note or "(no notable holiday/season for this stay)",
             guest_history=history)
-        variants.append({"humor_level": key,
-                         "content": ask_claude(prompt, model=model, max_tokens=1000)})
+        content = ask_claude(prompt, model=model, max_tokens=1000)
+        # A public review should never contain a link, phone number or email.
+        found = safety.unexpected(content)
+        variants.append({"humor_level": key, "content": content,
+                         "warning": ("Contains contact details — remove before posting: "
+                                     + ", ".join(found)) if found else ""})
     conn.execute("DELETE FROM reviews WHERE stay_id = ?", (stay["id"],))
     for v in variants:
         conn.execute(
-            "INSERT INTO reviews (stay_id, humor_level, content, created_at) VALUES (?, ?, ?, ?)",
-            (stay["id"], v["humor_level"], v["content"], db.now()))
+            "INSERT INTO reviews (stay_id, humor_level, content, warning, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (stay["id"], v["humor_level"], v["content"], v["warning"], db.now()))
     conn.commit()
     return {"variants": variants, "personalization_source": source, "note": scrape_note}
 
@@ -1034,9 +1042,16 @@ def edit_queue_item(item_id: int, body: QueueEdit):
         row = conn.execute("SELECT * FROM daily_queue WHERE id = ?", (item_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Queue item not found")
-        conn.execute("UPDATE daily_queue SET message = ? WHERE id = ?", (body.message, item_id))
+        warning = row["warning"] if "warning" in row.keys() else ""
+        if (row["kind"] or "arrival") == "arrival":
+            stay = conn.execute("SELECT * FROM stays WHERE id = ?", (row["stay_id"],)).fetchone()
+            unit = conn.execute("SELECT * FROM units WHERE id = ?", (row["unit_id"],)).fetchone()
+            if stay is not None and unit is not None:
+                warning = queue_mod.draft_warning(conn, unit, stay, body.message)
+        conn.execute("UPDATE daily_queue SET message = ?, warning = ? WHERE id = ?",
+                     (body.message, warning, item_id))
         conn.commit()
-        return {"ok": True}
+        return {"ok": True, "warning": warning}
     finally:
         conn.close()
 

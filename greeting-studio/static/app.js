@@ -81,6 +81,26 @@ function openAirbnb(url) {
   window.open(url || "https://www.airbnb.com/hosting/inbox", "_blank", "noopener");
 }
 
+function warnBox(id, text) {
+  // Contact details in a Claude draft that the host didn't write (see app/safety.py)
+  return `<p id="${id}" class="small" data-warn="${esc(text || "")}" style="${text ? "" : "display:none;"}color:#8a4b00;background:#fff4e0;border-left:3px solid #e0a13a;padding:6px 10px;margin:6px 0">⚠ ${esc(text || "")}</p>`;
+}
+
+function okToCopy(warnId) {
+  // Synchronous on purpose: runs inside the click, before the Airbnb tab opens.
+  const el = document.getElementById(warnId);
+  const w = el && el.dataset.warn;
+  return !w || confirm(`${w}\n\nCopy it anyway?`);
+}
+
+function setWarn(warnId, text) {
+  const el = document.getElementById(warnId);
+  if (!el) return;
+  el.dataset.warn = text || "";
+  el.textContent = text ? "⚠ " + text : "";
+  el.style.display = text ? "" : "none";
+}
+
 function reservationUrl(code) {
   code = (code || "").trim();
   return code ? `https://www.airbnb.com/hosting/reservations/details/${encodeURIComponent(code)}`
@@ -207,6 +227,7 @@ function renderQueueCard(q) {
     </div>
     ${src ? `<p class="small" style="color:${src.color};margin:2px 0 6px">${src.icon} ${src.text}</p>` : ""}
     ${q.error ? `<p class="small" style="color:var(--red);margin:6px 0">${esc(q.error)}</p>` : ""}
+    ${q.status !== "sent" ? warnBox(`q-warn-${q.id}`, q.warning) : ""}
     ${q.status === "needs_setup"
       ? `<p class="muted small">Fix it (door code / guest name on the stay page; Wi-Fi on the unit's Amenities). Saving the stay redrafts this card.</p>
          <button class="secondary" onclick="openStay(${q.stay_id})">Open stay →</button>`
@@ -217,7 +238,7 @@ function renderQueueCard(q) {
                 <button class="ghost" onclick="undoQueueSent(${q.id}, this)">Undo</button>`
              : `<button onclick="copyAndOpenQueue(${q.id}, '${esc(q.airbnb_url || "")}', this)">📋 Copy &amp; open in Airbnb</button>
                 <button class="secondary" onclick="markQueueSent(${q.id}, this)">✓ I sent it</button>
-                <button class="ghost" onclick="copyText($('#q-msg-${q.id}').value)">Copy only</button>
+                <button class="ghost" onclick="okToCopy('q-warn-${q.id}') && copyText($('#q-msg-${q.id}').value)">Copy only</button>
                 <button class="ghost" onclick="saveQueueEdit(${q.id}, this)">Save edit</button>
                 ${manualMode ? "" : `
                 <button class="secondary" onclick="sendQueueItem(${q.id}, this)">${q.status === "failed" ? "Retry auto-send" : "Auto-send"}</button>
@@ -236,14 +257,16 @@ function arrivalLabel(iso) {
 }
 
 function copyAndOpenQueue(id, url, btn) {
+  if (!okToCopy(`q-warn-${id}`)) return;
   const text = $(`#q-msg-${id}`).value;
   copyText(text, true).then(ok => {
     toast(ok ? "Copied ✓ — paste it into the guest's message thread and send. Then click \"I sent it\"."
              : "Couldn't copy — select the text and copy it yourself", !ok);
   });
   openAirbnb(url);
-  // keep any edits made on the card
-  api(`/api/queue/${id}`, { method: "PUT", body: { message: text } }).catch(() => {});
+  // keep any edits made on the card (and re-check them)
+  api(`/api/queue/${id}`, { method: "PUT", body: { message: text } })
+    .then(r => setWarn(`q-warn-${id}`, r && r.warning)).catch(() => {});
 }
 
 async function markQueueSent(id, btn) {
@@ -278,8 +301,9 @@ async function runQueue(btn) {
 async function saveQueueEdit(id, btn) {
   busy(btn, true);
   try {
-    await api(`/api/queue/${id}`, { method: "PUT", body: { message: $(`#q-msg-${id}`).value } });
-    toast("Edit saved ✓");
+    const r = await api(`/api/queue/${id}`, { method: "PUT", body: { message: $(`#q-msg-${id}`).value } });
+    setWarn(`q-warn-${id}`, r && r.warning);
+    toast(r && r.warning ? "Edit saved — it still has something that isn't in your template" : "Edit saved ✓", !!(r && r.warning));
   } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
 }
 
@@ -690,6 +714,7 @@ function renderDraftArea(s, extra = {}) {
         <p class="muted small">Verify the door code, WiFi, and dates before approving. [MISSING] = fill in the unit's amenities.</p></div>`}
     </div>
     ${extra.template ? `<h3>Merge-field values used</h3><table class="merge-table">${mvRows}</table>` : ""}
+    ${warnBox("draft-warn", extra.warning)}
     <div class="row" style="margin-top:10px">
       <button onclick="approveAndCopy(${s.id}, this)">📋 Copy &amp; open in Airbnb</button>
       <button class="secondary" onclick="markSent(${s.id}, this)">✓ I sent it</button>
@@ -702,7 +727,7 @@ async function draftGreeting(stayId, btn) {
   try {
     const r = await api(`/api/stays/${stayId}/draft`, { method: "POST" });
     $("#draft-area").innerHTML = renderDraftArea({ id: stayId, draft_greeting: r.draft, merge_values: r.merge_values },
-      { draft: r.draft, template: r.template, merge_values: r.merge_values });
+      { draft: r.draft, template: r.template, merge_values: r.merge_values, warning: r.warning });
     if (r.missing_values.length) {
       const amenityFields = r.missing_values.filter(v => v !== "guest_first_name");
       const parts = [];
@@ -719,6 +744,7 @@ async function draftGreeting(stayId, btn) {
 async function approveAndCopy(stayId, btn) {
   const content = $("#draft-text").value;
   if (!content.trim()) return toast("The draft is empty", true);
+  if (!okToCopy("draft-warn")) return;
   // Copy and open the tab first, while still inside the click — doing it
   // after a server round-trip made Chrome block the new tab as a pop-up.
   const copied = copyText(content, true);
@@ -774,11 +800,12 @@ function renderReview(r) {
     <div class="row" style="justify-content:space-between">
       <b>${HUMOR_LABELS[r.humor_level] || r.humor_level}</b>
       <span>
-        <button class="secondary" onclick="copyAndOpenReview('rev-${r.humor_level}')" title="Copies this review and opens the reservation — click Leave a review there and paste it">📋 Copy &amp; open in Airbnb</button>
-        <button class="ghost" onclick="copyText(document.getElementById('rev-${r.humor_level}').value)">Copy only</button>
+        <button class="secondary" onclick="okToCopy('rev-warn-${r.humor_level}') && copyAndOpenReview('rev-${r.humor_level}')" title="Copies this review and opens the reservation — click Leave a review there and paste it">📋 Copy &amp; open in Airbnb</button>
+        <button class="ghost" onclick="okToCopy('rev-warn-${r.humor_level}') && copyText(document.getElementById('rev-${r.humor_level}').value)">Copy only</button>
         ${manualMode ? "" : `<button class="ghost" onclick="reviewAssist(document.getElementById('rev-${r.humor_level}').value, this)" title="Opens Airbnb's review form and fills this text in. You pick the stars and press Submit.">Fill in Airbnb (auto)</button>`}
       </span>
     </div>
+    ${warnBox(`rev-warn-${r.humor_level}`, r.warning)}
     <textarea id="rev-${r.humor_level}">${esc(r.content)}</textarea>
   </div>`;
 }
