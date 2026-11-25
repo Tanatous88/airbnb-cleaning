@@ -43,6 +43,10 @@ label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); 
 .badge.drafted { background: #fff3e0; color: #e65100; }
 .badge.reviewed { background: #e3f2fd; color: #1565c0; }
 .badge.sent { background: #e8f5e9; color: var(--green); }
+.badge.returning { background: #f3e5f5; color: #6a1b9a; }
+.badge.warn { background: #fff3e0; color: #e65100; }
+.health-ok { color: var(--green); font-weight: 600; }
+.health-bad { color: var(--red); font-weight: 600; }
 
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }

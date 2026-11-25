@@ -188,6 +188,14 @@ DEFAULT_LISTING_ALIASES = {
 }
 
 
+DEFAULT_MIDSTAY_TEMPLATE = (
+    "Hi {{guest_first_name}}, just checking in after your first night at {{unit_name}} — "
+    "hope everything is comfortable! If anything isn't quite right, or you'd like a "
+    "recommendation, just reply here and we'll take care of it.\n\n"
+    "{{host_signature}}"
+)
+
+
 def init_db() -> None:
     conn = connect()
     conn.executescript(SCHEMA)
@@ -200,10 +208,17 @@ def init_db() -> None:
         conn.execute("ALTER TABLE stays ADD COLUMN phone_last4 TEXT DEFAULT ''")
     except sqlite3.OperationalError:
         pass
-    try:
-        conn.execute("ALTER TABLE daily_queue ADD COLUMN personalization_source TEXT DEFAULT ''")
-    except sqlite3.OperationalError:
-        pass
+    for ddl in (
+        "ALTER TABLE daily_queue ADD COLUMN personalization_source TEXT DEFAULT ''",
+        # 'arrival' (day-of-arrival greeting) or 'midstay' (day-after check-in)
+        "ALTER TABLE daily_queue ADD COLUMN kind TEXT DEFAULT 'arrival'",
+        # When the host's review of the guest was posted on Airbnb ('' = not yet)
+        "ALTER TABLE stays ADD COLUMN review_posted_at TEXT DEFAULT ''",
+    ):
+        try:
+            conn.execute(ddl)
+        except sqlite3.OperationalError:
+            pass
     # Hard safety net: a confirmation code identifies one real reservation, so
     # two stay rows must never share one. This is a backstop behind
     # queue._upsert_stay's own matching logic, in case that logic ever misses
@@ -257,6 +272,9 @@ def init_db() -> None:
         "default_checkout_time": "11:00 AM",
         "hosting_ics_url": "",
         "listing_aliases": json.dumps(DEFAULT_LISTING_ALIASES, indent=2),
+        "midstay_enabled": "1",
+        "midstay_template": DEFAULT_MIDSTAY_TEMPLATE,
+        "auto_reviews_enabled": "1",
     }
     for k, v in defaults.items():
         conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, v))

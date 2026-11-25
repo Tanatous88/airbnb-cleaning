@@ -30,5 +30,6 @@ Instructions:
 6. If the template already contains a sign-off, keep it exactly as written and do NOT add another. Only if the template has no sign-off, close with: {{host_signature}}
 7. If the template starts with a "Subject:" line, keep it as the first line unchanged.
 8. If a merge field's value is an empty string (not shown as [MISSING]), omit that entire line or section from the output — don't leave blank space, an empty header, or a stray line break where it would have gone.
+9. If the guest's booking message section starts with "RETURNING GUEST:", this guest has stayed with us before: open with one warm, natural "welcome back" sentence (mention the earlier place by name if it was a different unit). Never invent details about that earlier stay beyond what the line says. Don't include the "RETURNING GUEST:" line itself in the message.
 
 Output ONLY the message text, ready to paste into the Airbnb message box — no preamble, no explanation, no markdown.

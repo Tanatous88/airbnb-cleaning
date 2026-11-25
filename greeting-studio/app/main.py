@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import audit as audit_mod
-from . import db, parsers
+from . import db, maintenance, parsers
 from . import queue as queue_mod
 from .claude import ClaudeError, ask_claude, render_prompt, set_api_key
 from .queue import build_merge_values, read_thread_context
@@ -21,6 +21,7 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")
 
 app = FastAPI(title="Guest Greeting & Review Studio")
 db.init_db()
+STARTED_AT = db.now()
 
 
 def claude_call(conn, prompt_name: str, max_tokens: int = 4000, **variables) -> str:
@@ -455,6 +456,7 @@ def stay_dict(conn, row) -> dict:
     except ValueError:
         s["days_until_checkin"] = None
         s["greeting_due"] = False
+    s["prior_stays"] = queue_mod.prior_stays(conn, row)
     return s
 
 
@@ -589,7 +591,8 @@ def dashboard():
         # Greeting-due first, then by date
         stays.sort(key=lambda s: (not s["greeting_due"], s["checkin_date"]))
         return {"today": today.isoformat(), "stays": stays,
-                "due_count": sum(1 for s in stays if s["greeting_due"])}
+                "due_count": sum(1 for s in stays if s["greeting_due"]),
+                "reviews_due": reviews_due(conn, today)}
     finally:
         conn.close()
 
@@ -609,7 +612,15 @@ def draft_greeting(stay_id: int):
             raise HTTPException(
                 status_code=400,
                 detail=f"{unit['name']} has no template yet. Synthesize or bootstrap one first.")
+        if queue_mod.is_placeholder_name(stay["guest_name"]) \
+                and (stay["confirmation_code"] or "").strip():
+            # The calendar feed left the name out; the message thread has it.
+            read_thread_context(conn, stay)
+            stay = get_stay_or_404(conn, stay_id)
         merge_values = build_merge_values(conn, unit, stay)
+        context = "\n".join(x for x in (
+            queue_mod.returning_note(queue_mod.prior_stays(conn, stay)),
+            (stay["booking_message"] or "").strip()) if x)
         draft = claude_call(
             conn, "draft_greeting",
             unit_name=unit["name"],
@@ -619,7 +630,7 @@ def draft_greeting(stay_id: int):
             checkin_date=merge_values["checkin_date"],
             checkout_date=merge_values["checkout_date"],
             merge_values=json.dumps(merge_values, indent=2),
-            booking_message=stay["booking_message"] or "(empty)",
+            booking_message=context or "(empty)",
             host_signature=db.get_setting(conn, "host_signature", "— Your hosts"))
         conn.execute(
             "UPDATE stays SET draft_greeting = ?, merge_values = ?, status = 'drafted' WHERE id = ?",
@@ -763,60 +774,178 @@ def _seasonal_note(checkin_iso: str, checkout_iso: str) -> str:
     return ""
 
 
+def draft_reviews_for_stay(conn, stay, model: Optional[str] = None) -> dict:
+    """Generate the 3 review variants for a stay and store them. Raises
+    ClaudeError if any variant fails — existing drafts are only replaced
+    once all three succeed."""
+    unit = get_unit_or_404(conn, stay["unit_id"])
+    guest_msgs = []
+
+    # Primary source: live Airbnb thread, scraped fresh (host text filtered out).
+    # This can also fill in a guest name the calendar feed left out.
+    scraped_context, thread_source, scrape_note = read_thread_context(conn, stay)
+    stay = get_stay_or_404(conn, stay["id"])
+    if scraped_context.strip():
+        guest_msgs.append(scraped_context.strip())
+
+    # Legacy: threads manually imported for this guest via the Units import pipeline
+    rows = conn.execute(
+        "SELECT m.body FROM thread_messages m JOIN imports i ON i.id = m.import_id "
+        "WHERE m.unit_id = ? AND m.sender = 'guest' AND i.guest_name != '' "
+        "AND lower(i.guest_name) = lower(?) ORDER BY m.id",
+        (unit["id"], stay["guest_name"])).fetchall()
+    for r in rows:
+        if r["body"] not in guest_msgs:
+            guest_msgs.append(r["body"])
+
+    # Anything the host pasted by hand on the stay page
+    extra = (stay["guest_messages"] or "").strip()
+    if extra and extra not in guest_msgs:
+        guest_msgs.append(extra)
+
+    # Report where the flavor actually came from: a real live-thread scrape
+    # beats any fallback, even if other sources also happened to contribute
+    source = "scraped" if thread_source == "scraped" else ("stored" if guest_msgs else "none")
+
+    model = model or db.get_setting(conn, "anthropic_model", "claude-sonnet-4-6")
+    seasonal_note = _seasonal_note(stay["checkin_date"], stay["checkout_date"])
+    prior = queue_mod.prior_stays(conn, stay)
+    history = (f"Returning guest — has stayed with us {len(prior) + 1} times."
+               if prior else "(first stay with us)")
+    variants = []
+    for key, label in HUMOR_LEVELS:
+        prompt = render_prompt(
+            "generate_review",
+            unit_name=unit["name"],
+            unit_profile=unit["profile"] or "(no notes)",
+            guest_name=stay["guest_name"],
+            checkin_date=stay["checkin_date"],
+            checkout_date=stay["checkout_date"],
+            guest_messages="\n---\n".join(guest_msgs) or "(no messages on file)",
+            humor_level=label,
+            seasonal_note=seasonal_note or "(no notable holiday/season for this stay)",
+            guest_history=history)
+        variants.append({"humor_level": key,
+                         "content": ask_claude(prompt, model=model, max_tokens=1000)})
+    conn.execute("DELETE FROM reviews WHERE stay_id = ?", (stay["id"],))
+    for v in variants:
+        conn.execute(
+            "INSERT INTO reviews (stay_id, humor_level, content, created_at) VALUES (?, ?, ?, ?)",
+            (stay["id"], v["humor_level"], v["content"], db.now()))
+    conn.commit()
+    return {"variants": variants, "personalization_source": source, "note": scrape_note}
+
+
 @app.post("/api/stays/{stay_id}/reviews")
 def generate_reviews(stay_id: int):
     conn = db.connect()
     try:
         stay = get_stay_or_404(conn, stay_id)
-        unit = get_unit_or_404(conn, stay["unit_id"])
-        guest_msgs = []
-
-        # Primary source: live Airbnb thread, scraped fresh (host text filtered out)
-        scraped_context, thread_source, scrape_note = read_thread_context(conn, stay)
-        if scraped_context.strip():
-            guest_msgs.append(scraped_context.strip())
-
-        # Legacy: threads manually imported for this guest via the Units import pipeline
-        rows = conn.execute(
-            "SELECT m.body FROM thread_messages m JOIN imports i ON i.id = m.import_id "
-            "WHERE m.unit_id = ? AND m.sender = 'guest' AND i.guest_name != '' "
-            "AND lower(i.guest_name) = lower(?) ORDER BY m.id",
-            (unit["id"], stay["guest_name"])).fetchall()
-        for r in rows:
-            if r["body"] not in guest_msgs:
-                guest_msgs.append(r["body"])
-
-        # Anything the host pasted by hand on the stay page
-        extra = (stay["guest_messages"] or "").strip()
-        if extra and extra not in guest_msgs:
-            guest_msgs.append(extra)
-
-        # Report where the flavor actually came from: a real live-thread scrape
-        # beats any fallback, even if other sources also happened to contribute
-        source = "scraped" if thread_source == "scraped" else ("stored" if guest_msgs else "none")
-
-        variants = []
-        conn.execute("DELETE FROM reviews WHERE stay_id = ?", (stay_id,))
-        seasonal_note = _seasonal_note(stay["checkin_date"], stay["checkout_date"])
-        for key, label in HUMOR_LEVELS:
-            content = claude_call(
-                conn, "generate_review", max_tokens=1000,
-                unit_name=unit["name"],
-                unit_profile=unit["profile"] or "(no notes)",
-                guest_name=stay["guest_name"],
-                checkin_date=stay["checkin_date"],
-                checkout_date=stay["checkout_date"],
-                guest_messages="\n---\n".join(guest_msgs) or "(no messages on file)",
-                humor_level=label,
-                seasonal_note=seasonal_note or "(no notable holiday/season for this stay)")
-            conn.execute(
-                "INSERT INTO reviews (stay_id, humor_level, content, created_at) VALUES (?, ?, ?, ?)",
-                (stay_id, key, content, db.now()))
-            variants.append({"humor_level": key, "content": content})
-        conn.commit()
-        return {"variants": variants, "personalization_source": source, "note": scrape_note}
+        try:
+            return draft_reviews_for_stay(conn, stay)
+        except ClaudeError as e:
+            raise HTTPException(status_code=502, detail=str(e))
     finally:
         conn.close()
+
+
+REVIEW_WINDOW_DAYS = 14  # Airbnb closes the review window 14 days after checkout
+AUTO_REVIEW_MAX_PER_RUN = 6
+
+
+def auto_draft_reviews() -> dict:
+    """Morning job: draft reviews for stays that checked out in the last few
+    days and have none yet, so they're waiting on the dashboard. Uses the
+    cheaper queue model. Never posts anything."""
+    summary = {"drafted": 0, "errors": []}
+    conn = db.connect()
+    try:
+        if db.get_setting(conn, "auto_reviews_enabled", "1") != "1":
+            return summary
+        today = date.today()
+        rows = conn.execute(
+            "SELECT * FROM stays s WHERE s.checkout_date >= ? AND s.checkout_date < ? "
+            "AND s.review_posted_at = '' "
+            "AND NOT EXISTS (SELECT 1 FROM reviews r WHERE r.stay_id = s.id) "
+            "ORDER BY s.checkout_date LIMIT ?",
+            ((today - timedelta(days=3)).isoformat(), today.isoformat(),
+             AUTO_REVIEW_MAX_PER_RUN)).fetchall()
+        model = db.get_setting(conn, "queue_model", "claude-haiku-4-5")
+        for stay in rows:
+            try:
+                draft_reviews_for_stay(conn, stay, model=model)
+                summary["drafted"] += 1
+                queue_mod.audit("review_drafted", "", stay["guest_name"], f"stay {stay['id']}")
+            except Exception as e:
+                summary["errors"].append(f"stay {stay['id']}: {e}")
+                queue_mod.audit("review_draft_failed", "", stay["guest_name"], str(e))
+        db.set_setting(conn, "reviews_last_auto_run", db.now())
+        conn.commit()
+        return summary
+    finally:
+        conn.close()
+
+
+def reviews_due(conn, today: date) -> list:
+    """Stays checked out within Airbnb's review window whose review hasn't been
+    marked posted yet, soonest deadline first."""
+    rows = conn.execute(
+        "SELECT s.*, u.name AS unit_name, "
+        "(SELECT COUNT(*) FROM reviews r WHERE r.stay_id = s.id) AS draft_count "
+        "FROM stays s JOIN units u ON u.id = s.unit_id "
+        "WHERE s.checkout_date >= ? AND s.checkout_date <= ? AND s.review_posted_at = '' "
+        "ORDER BY s.checkout_date",
+        ((today - timedelta(days=REVIEW_WINDOW_DAYS)).isoformat(), today.isoformat())).fetchall()
+    out = []
+    for r in rows:
+        days_left = REVIEW_WINDOW_DAYS - (today - date.fromisoformat(r["checkout_date"])).days
+        out.append({"stay_id": r["id"], "guest_name": r["guest_name"],
+                    "unit_name": r["unit_name"], "checkout_date": r["checkout_date"],
+                    "days_left": days_left, "has_drafts": r["draft_count"] > 0})
+    return out
+
+
+class ReviewPostedIn(BaseModel):
+    posted: bool = True
+
+
+@app.post("/api/stays/{stay_id}/review-posted")
+def mark_review_posted(stay_id: int, body: ReviewPostedIn):
+    conn = db.connect()
+    try:
+        get_stay_or_404(conn, stay_id)
+        conn.execute("UPDATE stays SET review_posted_at = ? WHERE id = ?",
+                     (db.now() if body.posted else "", stay_id))
+        conn.commit()
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+@app.post("/api/stays/{stay_id}/review-assist")
+def review_assist(stay_id: int, body: ApproveIn):
+    """Opens the Airbnb review form in a visible window and fills in the
+    public review text. Never picks star ratings and never submits — the host
+    does both."""
+    if not body.content.strip():
+        raise HTTPException(status_code=400, detail="Review text is empty")
+    conn = db.connect()
+    try:
+        stay = get_stay_or_404(conn, stay_id)
+    finally:
+        conn.close()
+    if not (stay["confirmation_code"] or "").strip():
+        raise HTTPException(status_code=400, detail="This stay has no Airbnb confirmation code, "
+                            "so its review page can't be opened. Add it on the stay page.")
+    try:
+        from .browser_assist import fill_airbnb_review
+    except ImportError:
+        raise HTTPException(status_code=501, detail="Playwright is not installed.")
+    try:
+        return {"ok": True, "detail": fill_airbnb_review(stay["confirmation_code"], body.content)}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Review assist failed ({e}). The review "
+                            "text is on your clipboard — paste it into Airbnb yourself.")
 
 
 @app.get("/api/stays/{stay_id}/reviews")
@@ -924,19 +1053,35 @@ def send_queue_item(item_id: int, body: QueueEdit):
         db.set_setting(conn, "airbnb_session_expired", "")
         conn.execute("UPDATE daily_queue SET status='sent', error='', message=?, sent_at=? "
                      "WHERE id=?", (body.message, db.now(), item_id))
+        # Logged with the greetings so the thread scraper recognises it as the
+        # host's own text and never mistakes it for something the guest said.
         conn.execute("INSERT INTO sent_greetings (stay_id, content, sent_at) VALUES (?, ?, ?)",
                      (row["stay_id"], body.message, db.now()))
-        conn.execute("UPDATE stays SET status='sent' WHERE id=?", (row["stay_id"],))
+        kind = row["kind"] or "arrival"
+        if kind == "arrival":
+            conn.execute("UPDATE stays SET status='sent' WHERE id=?", (row["stay_id"],))
         conn.commit()
-        queue_mod.audit("sent", row["unit_name"], row["guest_name"], "ok")
+        queue_mod.audit("sent" if kind == "arrival" else f"sent_{kind}",
+                        row["unit_name"], row["guest_name"], "ok")
         return {"ok": True, "detail": detail}
     finally:
         conn.close()
 
 
+def morning_job():
+    """Everything that runs unattended at 7 AM. Each part is isolated so one
+    failing (e.g. Airbnb logged out) doesn't stop the others."""
+    for job in (queue_mod.build_queue_for_today, auto_draft_reviews):
+        try:
+            job()
+        except Exception as e:
+            print(f"(!) morning job {job.__name__} failed: {e}")
+            queue_mod.audit("job_failed", "", "", f"{job.__name__}: {e}")
+
+
 def _start_scheduler():
     """7:00 AM America/Los_Angeles, every day, inside the FastAPI process.
-    Also catch up on startup if the Mac was asleep at 7 (job is idempotent)."""
+    Also catch up on startup if the PC was off at 7 (the job is idempotent)."""
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
         from apscheduler.triggers.cron import CronTrigger
@@ -945,7 +1090,7 @@ def _start_scheduler():
               "Run: pip install apscheduler")
         return
     scheduler = BackgroundScheduler(timezone="America/Los_Angeles")
-    scheduler.add_job(queue_mod.build_queue_for_today, CronTrigger(hour=7, minute=0),
+    scheduler.add_job(morning_job, CronTrigger(hour=7, minute=0),
                       id="morning_queue", replace_existing=True,
                       misfire_grace_time=6 * 3600)
     scheduler.start()
@@ -965,12 +1110,39 @@ def _start_scheduler():
     finally:
         conn.close()
     if now_pt.hour >= 7 and not last_run.startswith(date.today().isoformat()):
-        threading.Thread(target=queue_mod.build_queue_for_today, daemon=True).start()
+        threading.Thread(target=morning_job, daemon=True).start()
 
 
 @app.on_event("startup")
 def on_startup():
     _start_scheduler()
+
+
+# ---------------------------------------------------------------------------
+# Health
+# ---------------------------------------------------------------------------
+
+@app.get("/api/health")
+def health():
+    conn = db.connect()
+    try:
+        return maintenance.health_report(conn, STARTED_AT)
+    finally:
+        conn.close()
+
+
+@app.post("/api/health/merge-duplicates")
+def merge_duplicates():
+    conn = db.connect()
+    try:
+        return maintenance.merge_duplicates(conn)
+    finally:
+        conn.close()
+
+
+@app.post("/api/health/sync")
+def sync_now():
+    return queue_mod.sync_calendars()
 
 
 # ---------------------------------------------------------------------------
@@ -987,6 +1159,9 @@ class SettingsIn(BaseModel):
     api_key: Optional[str] = None
     hosting_ics_url: Optional[str] = None
     listing_aliases: Optional[dict] = None
+    midstay_enabled: Optional[bool] = None
+    midstay_template: Optional[str] = None
+    auto_reviews_enabled: Optional[bool] = None
 
 
 @app.get("/api/settings")
@@ -1004,6 +1179,10 @@ def get_settings():
             "hosting_ics_url": db.get_setting(conn, "hosting_ics_url", ""),
             "listing_aliases": json.loads(db.get_setting(conn, "listing_aliases", "{}") or "{}"),
             "calendar_last_sync": db.get_setting(conn, "calendar_last_sync", ""),
+            "midstay_enabled": db.get_setting(conn, "midstay_enabled", "1") == "1",
+            "midstay_template": db.get_setting(conn, "midstay_template",
+                                               db.DEFAULT_MIDSTAY_TEMPLATE),
+            "auto_reviews_enabled": db.get_setting(conn, "auto_reviews_enabled", "1") == "1",
         }
     finally:
         conn.close()
@@ -1018,6 +1197,14 @@ def update_settings(body: SettingsIn):
             val = getattr(body, key)
             if val is not None:
                 db.set_setting(conn, key, val)
+        for key in ("midstay_enabled", "auto_reviews_enabled"):
+            val = getattr(body, key)
+            if val is not None:
+                db.set_setting(conn, key, "1" if val else "0")
+        if body.midstay_template is not None:
+            if not body.midstay_template.strip():
+                raise HTTPException(status_code=400, detail="Mid-stay message can't be empty")
+            db.set_setting(conn, "midstay_template", body.midstay_template)
         if body.listing_aliases is not None:
             db.set_setting(conn, "listing_aliases", json.dumps(body.listing_aliases, indent=2))
         if body.core_items is not None:

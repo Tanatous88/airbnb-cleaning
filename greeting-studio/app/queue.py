@@ -80,7 +80,11 @@ def build_merge_values(conn, unit, stay) -> dict:
                         or db.get_setting(conn, "default_checkin_time", "4:00 PM"),
         "checkout_time": amenities.get("checkout_time")
                          or db.get_setting(conn, "default_checkout_time", "11:00 AM"),
-        "door_code": phone_last4 or amenities.get("door_code") or "[MISSING]",
+        # door_code_fallback is for locks synced with Airbnb (Cosmopolitan, Nook):
+        # Airbnb shows the guest their code in the app, so a missing phone
+        # number shouldn't block the whole greeting.
+        "door_code": (phone_last4 or amenities.get("door_code")
+                      or amenities.get("door_code_fallback") or "[MISSING]"),
         "wifi_network": amenities.get("wifi_network") or "[MISSING]",
         "wifi_password": amenities.get("wifi_password") or "[MISSING]",
         "weekend_guide": _weekend_guide_blurb(stay["checkin_date"], stay["checkout_date"]),
@@ -331,11 +335,63 @@ def _looks_like_host_text(text: str, known_host_texts: list) -> bool:
     return False
 
 
+def is_placeholder_name(name) -> bool:
+    """True when the calendar sync couldn't get a real guest name."""
+    n = " ".join((name or "").lower().split())
+    return not n or n == UNKNOWN_GUEST.lower() or n.split()[0] in ("guest", "reserved")
+
+
+def prior_stays(conn, stay) -> list:
+    """Earlier stays by the same guest, at any unit. A match is the same full
+    name (two or more words), or the same first name AND the same phone last
+    4 — a first name alone ("Robert") is far too common to trust."""
+    name = " ".join((stay["guest_name"] or "").lower().split())
+    if is_placeholder_name(name):
+        return []
+    phone = (stay["phone_last4"] or "").strip()
+    rows = conn.execute(
+        "SELECT s.id, s.guest_name, s.phone_last4, s.checkin_date, u.name AS unit_name "
+        "FROM stays s JOIN units u ON u.id = s.unit_id "
+        "WHERE s.id != ? AND s.checkout_date <= ? ORDER BY s.checkin_date DESC",
+        (stay["id"], stay["checkin_date"])).fetchall()
+    found = []
+    for r in rows:
+        other = " ".join((r["guest_name"] or "").lower().split())
+        if is_placeholder_name(other):
+            continue
+        same_full_name = len(name.split()) >= 2 and other == name
+        same_phone = (bool(phone) and (r["phone_last4"] or "").strip() == phone
+                      and other.split()[0] == name.split()[0])
+        if same_full_name or same_phone:
+            found.append({"stay_id": r["id"], "unit_name": r["unit_name"],
+                          "checkin_date": r["checkin_date"]})
+    return found
+
+
+def returning_note(prior: list) -> str:
+    """One line for the greeting prompt, or '' for a first-time guest."""
+    if not prior:
+        return ""
+    visits = []
+    for p in prior[:3]:
+        try:
+            when = date.fromisoformat(p["checkin_date"]).strftime("%B %Y")
+        except ValueError:
+            when = p["checkin_date"]
+        visits.append(f"{p['unit_name']} ({when})")
+    return ("RETURNING GUEST: they have stayed with us before — " + "; ".join(visits)
+            + ". Welcome them back warmly in one natural sentence near the top.")
+
+
 def read_thread_context(conn, stay):
     """Best-effort: read the GUEST's messages from the Airbnb thread via the
-    persistent Playwright profile (headless), filtering out anything that
-    looks like the host's own sent greeting. Falls back to the stay's stored
-    booking message on any failure — Airbnb markup changes often.
+    persistent Playwright profile, filtering out anything that looks like the
+    host's own sent greeting. Falls back to the stay's stored booking message
+    on any failure — Airbnb markup changes often.
+
+    Side effect: if the stay only has a placeholder guest name and the thread
+    shows the guest's name ("Sent by Melissa · Booker"), the stay is updated
+    with it — callers should re-read the stay afterwards.
 
     Returns (context, source, scrape_note):
       source       — 'scraped' (live thread contributed text), 'stored'
@@ -350,12 +406,19 @@ def read_thread_context(conn, stay):
     if not code:
         return stored, ("stored" if stored else "none"), ""
     try:
-        from .browser_assist import read_thread_messages
-        scraped = read_thread_messages(code)
+        from .browser_assist import read_thread
+        thread = read_thread(code)
     except Exception as e:
         reason = " ".join(str(e).split())[:200]  # one line, no ASCII-art tool output
         note = f"couldn't read the Airbnb thread ({reason})"
         return stored, ("stored" if stored else "none"), note
+    scraped = thread.get("messages") or []
+    found_name = (thread.get("guest_name") or "").strip()
+    if found_name and not is_placeholder_name(found_name) \
+            and is_placeholder_name(stay["guest_name"]):
+        conn.execute("UPDATE stays SET guest_name = ? WHERE id = ?", (found_name, stay["id"]))
+        conn.commit()
+        audit("name_filled", "", found_name, f"stay {stay['id']}, from the Airbnb thread")
     known_host_texts = _known_host_texts(conn, stay)
     scraped = [t for t in scraped if not _looks_like_host_text(t, known_host_texts)]
     if scraped:
@@ -364,88 +427,144 @@ def read_thread_context(conn, stay):
     return stored, ("stored" if stored else "none"), ""
 
 
+def _save_queue_item(conn, stay, day: str, kind: str, message: str, status: str,
+                     error: str, source: str) -> None:
+    """Insert or update the one queue row for (stay, day). The DB's unique
+    index on (stay_id, checkin_date) guards against concurrent builds racing;
+    if another build won, update its row instead of crashing."""
+    code = stay["confirmation_code"] or ""
+    row = conn.execute("SELECT id FROM daily_queue WHERE stay_id = ? AND checkin_date = ?",
+                       (stay["id"], day)).fetchone()
+    if row is None:
+        try:
+            conn.execute(
+                "INSERT INTO daily_queue (stay_id, unit_id, guest_name, checkin_date, kind, "
+                "message, status, error, thread_ref, personalization_source, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (stay["id"], stay["unit_id"], stay["guest_name"], day, kind, message, status,
+                 error, code, source, db.now()))
+            return
+        except sqlite3.IntegrityError:
+            row = conn.execute("SELECT id FROM daily_queue WHERE stay_id = ? AND checkin_date = ?",
+                               (stay["id"], day)).fetchone()
+            if row is None:
+                raise
+    conn.execute(
+        "UPDATE daily_queue SET guest_name=?, kind=?, message=?, status=?, error=?, thread_ref=?, "
+        "personalization_source=?, created_at=? WHERE id=?",
+        (stay["guest_name"], kind, message, status, error, code, source, db.now(), row["id"]))
+
+
+def _skip_existing(conn, stay_id: int, day: str, force: bool) -> bool:
+    existing = conn.execute("SELECT status FROM daily_queue WHERE stay_id = ? AND checkin_date = ?",
+                            (stay_id, day)).fetchone()
+    return bool(existing) and (not force or existing["status"] == "sent")
+
+
+def _reload_stay(conn, stay_id: int):
+    return conn.execute("SELECT * FROM stays WHERE id = ?", (stay_id,)).fetchone()
+
+
+def _setup_problems(missing: list, scrape_note: str = "") -> str:
+    problems = []
+    if "guest_first_name" in missing:
+        problems.append("guest name unknown (not in Airbnb's calendar feed or message thread) "
+                        "— open the stay and set the guest's name")
+    amen = [f for f in missing if f != "guest_first_name"]
+    if amen:
+        problems.append("missing value(s): " + ", ".join(amen) +
+                        " — door code / name go on the stay, Wi-Fi on the unit's Amenities form")
+    if scrape_note:
+        problems.append(scrape_note)
+    return "; ".join(problems) + ". Then click Rebuild."
+
+
+def _build_arrivals(conn, today: str, force: bool, summary: dict) -> None:
+    stays = conn.execute(
+        "SELECT * FROM stays WHERE checkin_date = ? AND status != 'sent'", (today,)).fetchall()
+    for stay in stays:
+        if _skip_existing(conn, stay["id"], today, force):
+            summary["skipped"] += 1
+            continue
+        unit = conn.execute("SELECT * FROM units WHERE id = ?", (stay["unit_id"],)).fetchone()
+        tpl = db.latest_template(conn, unit["id"])
+        source, message = "", ""
+        if tpl is None:
+            status, error = "needs_setup", f"{unit['name']} has no template yet."
+        else:
+            merge_values = build_merge_values(conn, unit, stay)
+            missing = missing_fields(tpl["content"], merge_values)
+            thread = None
+            if "guest_first_name" in missing and (stay["confirmation_code"] or "").strip():
+                # The thread often knows the name the calendar feed left out.
+                thread = read_thread_context(conn, stay)
+                stay = _reload_stay(conn, stay["id"])
+                merge_values = build_merge_values(conn, unit, stay)
+                missing = missing_fields(tpl["content"], merge_values)
+            if missing:
+                status = "needs_setup"
+                error = _setup_problems(missing, thread[2] if thread else "")
+            else:
+                context, source, scrape_note = thread or read_thread_context(conn, stay)
+                welcome_back = returning_note(prior_stays(conn, stay))
+                if welcome_back:
+                    context = (welcome_back + "\n" + context).strip()
+                message, note = _personalize(conn, unit, stay, tpl["content"], merge_values,
+                                             context)
+                status = "ready"
+                error = "; ".join(x for x in (scrape_note, note) if x)
+        _save_queue_item(conn, stay, today, "arrival", message, status, error, source)
+        summary["queued"] += 1
+        if status == "needs_setup":
+            summary["needs_setup"] += 1
+        audit("draft", unit["name"], stay["guest_name"], status)
+
+
+def _build_midstays(conn, today_date: date, force: bool, summary: dict) -> None:
+    """A short "how's everything?" note the day after arrival, for stays of
+    two nights or more — a chance to fix a problem before it becomes a bad
+    review. Deterministic (no Claude call) and, like every queue item, only
+    goes out when the host clicks Send."""
+    if db.get_setting(conn, "midstay_enabled", "1") != "1":
+        return
+    today = today_date.isoformat()
+    yesterday = (today_date - timedelta(days=1)).isoformat()
+    template = db.get_setting(conn, "midstay_template", db.DEFAULT_MIDSTAY_TEMPLATE)
+    signature = db.get_setting(conn, "host_signature", "— Your hosts")
+    stays = conn.execute("SELECT * FROM stays WHERE checkin_date = ? AND checkout_date > ?",
+                         (yesterday, today)).fetchall()
+    for stay in stays:
+        if _skip_existing(conn, stay["id"], today, force):
+            summary["skipped"] += 1
+            continue
+        unit = conn.execute("SELECT * FROM units WHERE id = ?", (stay["unit_id"],)).fetchone()
+        merge_values = dict(build_merge_values(conn, unit, stay),
+                            unit_name=unit["name"], host_signature=signature)
+        missing = missing_fields(template, merge_values)
+        if missing:
+            status, message, error = "needs_setup", "", _setup_problems(missing)
+        else:
+            status, message, error = "ready", render_local(template, merge_values).strip(), ""
+        _save_queue_item(conn, stay, today, "midstay", message, status, error, "")
+        summary["midstay"] += 1
+        if status == "needs_setup":
+            summary["needs_setup"] += 1
+        audit("draft_midstay", unit["name"], stay["guest_name"], status)
+
+
 def build_queue_for_today(force: bool = False) -> dict:
     """Sync calendars, then draft a welcome message for every stay checking in
-    today. Idempotent: stays already queued today are skipped unless force=True."""
+    today and a check-in note for every stay that arrived yesterday.
+    Idempotent: stays already queued today are skipped unless force=True."""
     sync = sync_calendars()
-    today = date.today().isoformat()
+    today_date = date.today()
+    today = today_date.isoformat()
     conn = db.connect()
-    summary = {"date": today, "queued": 0, "skipped": 0, "needs_setup": 0,
+    summary = {"date": today, "queued": 0, "midstay": 0, "skipped": 0, "needs_setup": 0,
                "errors": list(sync["errors"]), "sync": sync}
     try:
-        stays = conn.execute(
-            "SELECT * FROM stays WHERE checkin_date = ? AND status != 'sent'", (today,)
-        ).fetchall()
-        for stay in stays:
-            existing = conn.execute(
-                "SELECT id, status FROM daily_queue WHERE stay_id = ? AND checkin_date = ?",
-                (stay["id"], today)).fetchone()
-            if existing and not force:
-                summary["skipped"] += 1
-                continue
-            if existing and existing["status"] == "sent":
-                summary["skipped"] += 1
-                continue
-
-            unit = conn.execute("SELECT * FROM units WHERE id = ?", (stay["unit_id"],)).fetchone()
-            tpl = db.latest_template(conn, unit["id"])
-            merge_values = build_merge_values(conn, unit, stay) if unit else {}
-
-            source = ""
-            if tpl is None:
-                status, message, error = "needs_setup", "", f"{unit['name']} has no template yet."
-            else:
-                missing = missing_fields(tpl["content"], merge_values)
-                if missing:
-                    status, message = "needs_setup", ""
-                    problems = []
-                    if "guest_first_name" in missing:
-                        problems.append("guest name unknown (Airbnb's calendar feed omits names) "
-                                        "— open the stay and set the guest's name")
-                    amen = [f for f in missing if f != "guest_first_name"]
-                    if amen:
-                        problems.append("missing amenity value(s): " + ", ".join(amen) +
-                                        " — fill them in on the unit's Amenities form")
-                    error = "; ".join(problems) + ". Then click Rebuild."
-                else:
-                    thread_context, source, scrape_note = read_thread_context(conn, stay)
-                    message, note = _personalize(conn, unit, stay, tpl["content"], merge_values,
-                                                 thread_context)
-                    status = "ready"
-                    error = "; ".join(x for x in (scrape_note, note) if x)
-
-            if existing:
-                conn.execute(
-                    "UPDATE daily_queue SET message=?, status=?, error=?, thread_ref=?, "
-                    "personalization_source=?, created_at=? WHERE id=?",
-                    (message, status, error, stay["confirmation_code"] or "", source, db.now(),
-                     existing["id"]))
-            else:
-                try:
-                    conn.execute(
-                        "INSERT INTO daily_queue (stay_id, unit_id, guest_name, checkin_date, "
-                        "message, status, error, thread_ref, personalization_source, created_at) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (stay["id"], stay["unit_id"], stay["guest_name"], today, message, status,
-                         error, stay["confirmation_code"] or "", source, db.now()))
-                except sqlite3.IntegrityError:
-                    # Another concurrent build won the race and already
-                    # inserted this stay's row — self-heal by updating it
-                    # instead of crashing this build over one stay.
-                    row = conn.execute(
-                        "SELECT id FROM daily_queue WHERE stay_id = ? AND checkin_date = ?",
-                        (stay["id"], today)).fetchone()
-                    if not row:
-                        raise
-                    conn.execute(
-                        "UPDATE daily_queue SET message=?, status=?, error=?, thread_ref=?, "
-                        "personalization_source=?, created_at=? WHERE id=?",
-                        (message, status, error, stay["confirmation_code"] or "", source,
-                         db.now(), row["id"]))
-            summary["queued"] += 1
-            if status == "needs_setup":
-                summary["needs_setup"] += 1
-            audit("draft", unit["name"] if unit else "?", stay["guest_name"], status)
+        _build_arrivals(conn, today, force, summary)
+        _build_midstays(conn, today_date, force, summary)
         conn.commit()
         db.set_setting(conn, "queue_last_run", db.now())
         db.set_setting(conn, "queue_last_summary", json.dumps(summary))
@@ -459,9 +578,11 @@ def build_queue_for_today(force: bool = False) -> dict:
 def _notify(summary: dict) -> None:
     """Desktop notification (macOS or Windows); the dashboard badge always shows
     the same summary regardless."""
-    if summary["queued"] == 0:
+    if summary["queued"] == 0 and not summary.get("midstay"):
         return
     text = f"{summary['queued']} arrival(s) queued for today"
+    if summary.get("midstay"):
+        text += f", {summary['midstay']} mid-stay check-in(s)"
     if summary["needs_setup"]:
         text += f" — {summary['needs_setup']} need setup"
     import sys

@@ -4,6 +4,7 @@ UNIT: {{unit_name}}
 UNIT CHARACTER: {{unit_profile}}
 
 STAY: {{guest_name}}, {{checkin_date}} to {{checkout_date}}
+GUEST HISTORY: {{guest_history}}
 
 MESSAGES FROM THE GUEST DURING THE STAY (may be empty):
 ---
@@ -25,5 +26,6 @@ Rules — these override everything else:
 5. Close with a genuine recommendation (e.g. "we'd happily host them again") if deserved — and for this tool, assume it is deserved unless the host edits it out.
 6. Keep it to 2-5 sentences. This is a public Airbnb review, not an essay.
 7. If the seasonal context above names a holiday/season, you MAY weave in one light, natural seasonal touch (a Halloween/Thanksgiving/Christmas/New Year's reference) — but only if it fits naturally and doesn't crowd out real details from the guest's actual stay. Never force it, never let it replace a genuine detail, and skip it entirely if there's nothing notable or it would feel shoehorned in. If there's no seasonal context, don't invent one.
+8. If the guest history says they're a returning guest, you may mention that warmly once (e.g. "always a pleasure to have them back"). Don't invent details about their earlier stays.
 
 Output ONLY the review text — no preamble, no explanation, no quotes around it.

@@ -60,6 +60,15 @@ CORE_ITEMS = [
 
 HOST_SIGNATURE = "Warmly,\nBruce & Sue\nThree Forks Accommodations"
 
+# Non-secret amenity defaults, applied only where the unit doesn't already
+# have the key (so edits made on the unit's Amenities form are kept).
+# Cosmopolitan & Nook locks are synced with Airbnb, which shows guests their
+# code in the app — so a missing phone number shouldn't block the greeting.
+AMENITY_DEFAULTS = {
+    "The Cosmopolitan": {"door_code_fallback": "listed in your Airbnb app"},
+    "The Midnight Nook": {"door_code_fallback": "listed in your Airbnb app"},
+}
+
 
 def main() -> None:
     db.init_db()
@@ -90,13 +99,19 @@ def main() -> None:
             if ics_url is not None:
                 conn.execute("UPDATE units SET ics_url = ? WHERE id = ?", (ics_url, unit["id"]))
                 wifi_note += ", calendar feed set"
-            if values:
-                amenities = json.loads(unit["amenities"] or "{}")
-                amenities.update(values)
-                conn.execute("UPDATE units SET amenities = ? WHERE id = ?",
-                             (json.dumps(amenities), unit["id"]))
-                wifi_note += f", Wi-Fi set to {values.get('wifi_network', '?')!r}"
+            amenities = json.loads(unit["amenities"] or "{}")
+            for key, val in AMENITY_DEFAULTS.get(unit_name, {}).items():
+                amenities.setdefault(key, val)
+            amenities.update(values)
+            conn.execute("UPDATE units SET amenities = ? WHERE id = ?",
+                         (json.dumps(amenities), unit["id"]))
+            if values.get("wifi_network"):
+                wifi_note += f", Wi-Fi set to {values['wifi_network']!r}"
             print(f"✓ {unit_name}: template v{version} loaded{wifi_note}")
+            feed = ics_url if ics_url is not None else unit["ics_url"]
+            if not (feed or "").strip():
+                print(f"  (!) {unit_name} has no Airbnb calendar feed URL — door codes can't "
+                      f"auto-fill. Add it on the unit's page or as \"ics_url\" in local_values.json.")
 
         hosting_url = local_values.get("_hosting_ics_url")
         if hosting_url:

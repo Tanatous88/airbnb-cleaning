@@ -10,3 +10,5 @@ send_audit.log
 debug_thread_read.png
 app.log
 app_error.log
+debug_review_form.png
+.pytest_cache/

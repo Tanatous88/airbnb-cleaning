@@ -62,7 +62,11 @@ const STATUS_BADGE = s => `<span class="badge ${esc(s)}">${esc(s)}</span>`;
 /* ---------------- tabs ---------------- */
 
 const views = { dashboard: renderDashboard, units: renderUnits, stays: renderStays,
-                audit: renderAudit, settings: renderSettings };
+                audit: renderAudit, health: renderHealth, settings: renderSettings };
+
+const RETURNING_BADGE = s => (s.prior_stays && s.prior_stays.length)
+  ? ` <span class="badge returning" title="${esc(s.prior_stays.map(p => p.unit_name + " " + p.checkin_date).join(", "))}">returning guest</span>`
+  : "";
 
 $$("#tabs button").forEach(btn => btn.addEventListener("click", () => showTab(btn.dataset.tab)));
 
@@ -86,15 +90,33 @@ async function renderDashboard() {
       draft to open a window and log in to Airbnb again, then retry.</div>`;
   }
 
-  html += `<h2>Today's Arrivals ${queue.items.length ? `<span class="badge ${queue.items.some(i => i.status === "needs_setup") ? "due" : "reviewed"}">${queue.items.filter(i => i.status !== "sent").length} pending</span>` : ""}
+  const arrivals = queue.items.filter(i => (i.kind || "arrival") === "arrival");
+  const midstays = queue.items.filter(i => i.kind === "midstay");
+  html += `<h2>Today's Arrivals ${arrivals.length ? `<span class="badge ${arrivals.some(i => i.status === "needs_setup") ? "due" : "reviewed"}">${arrivals.filter(i => i.status !== "sent").length} pending</span>` : ""}
     <button class="secondary small" style="float:right" onclick="runQueue(this)">↻ Rebuild queue now</button></h2>`;
   html += `<p class="muted small">Drafts are generated automatically every morning at 7:00 AM Pacific
     (and on app start if the 7 AM run was missed). Nothing sends without your Send click.
     ${queue.last_run ? `Last run: ${esc(queue.last_run.replace("T", " ").slice(0, 16))} UTC.` : "No run yet today."}</p>`;
-  if (!queue.items.length) {
-    html += `<div class="card muted small">No check-ins today.</div>`;
-  } else {
-    html += queue.items.map(renderQueueCard).join("");
+  html += arrivals.length ? arrivals.map(renderQueueCard).join("")
+                          : `<div class="card muted small">No check-ins today.</div>`;
+  if (midstays.length) {
+    html += `<h2>Mid-stay check-ins <span class="badge reviewed">${midstays.filter(i => i.status !== "sent").length} pending</span></h2>
+      <p class="muted small">A quick "how's everything?" the day after arrival, for stays of 2+ nights — a chance to fix problems before they become reviews. Edit the wording in Settings.</p>`;
+    html += midstays.map(renderQueueCard).join("");
+  }
+
+  const reviewsDue = dash.reviews_due || [];
+  if (reviewsDue.length) {
+    html += `<h2>Reviews due <span class="badge due">${reviewsDue.length}</span></h2>
+      <p class="muted small">Airbnb closes the review window 14 days after checkout. Drafts are written automatically the morning after checkout.</p>
+      <div class="card"><table><thead><tr><th>Guest</th><th>Unit</th><th>Checked out</th><th>Time left</th><th></th></tr></thead><tbody>`;
+    for (const r of reviewsDue) {
+      const left = r.days_left <= 0 ? "last day!" : `${r.days_left} day${r.days_left === 1 ? "" : "s"}`;
+      html += `<tr><td>${esc(r.guest_name)}</td><td>${esc(r.unit_name)}</td><td>${esc(r.checkout_date)}</td>
+        <td><span class="badge ${r.days_left <= 3 ? "due" : "pending"}">${left}</span></td>
+        <td>${r.has_drafts ? '<span class="badge reviewed">drafts ready</span> ' : ""}<button class="ghost" onclick="openStay(${r.stay_id})">Open →</button></td></tr>`;
+    }
+    html += `</tbody></table></div>`;
   }
 
   html += `<h2>Next 7 days ${dash.due_count ? `<span class="badge due">⚠ ${dash.due_count} greeting${dash.due_count > 1 ? "s" : ""} due</span>` : ""}</h2>`;
@@ -110,7 +132,7 @@ async function renderDashboard() {
         : "";
       html += `<tr>
         <td>${esc(s.checkin_date)}<div class="small muted">${s.days_until_checkin === 0 ? "today" : s.days_until_checkin === 1 ? "tomorrow" : "in " + s.days_until_checkin + " days"}</div></td>
-        <td>${esc(s.guest_name)}</td>
+        <td>${esc(s.guest_name)}${RETURNING_BADGE(s)}</td>
         <td>${esc(s.unit_name)}</td>
         <td>${due}${STATUS_BADGE(s.status)}</td>
         <td><button class="ghost" onclick="openStay(${s.id})">Open →</button></td></tr>`;
@@ -136,7 +158,7 @@ function renderQueueCard(q) {
   const src = PERSONALIZATION_SOURCE[q.personalization_source];
   return `<div class="card">
     <div class="row" style="justify-content:space-between">
-      <b>${esc(q.unit_name)} — ${esc(q.guest_name)}</b>
+      <b>${q.kind === "midstay" ? "Check-in note · " : ""}${esc(q.unit_name)} — ${esc(q.guest_name)}</b>
       <span class="badge ${badge}">${label}</span>
     </div>
     ${src ? `<p class="small" style="color:${src.color};margin:2px 0 6px">${src.icon} ${src.text}</p>` : ""}
@@ -510,7 +532,10 @@ async function deleteStay(id) {
   renderStays();
 }
 
+let currentStayId = null;
+
 async function openStay(stayId) {
+  currentStayId = stayId;
   main.innerHTML = `<div class="muted">Loading…</div>`;
   const stays = await api("/api/stays");
   const s = stays.find(x => x.id === stayId);
@@ -519,12 +544,12 @@ async function openStay(stayId) {
 
   main.innerHTML = `
   <button class="ghost" onclick="renderStays()">← All stays</button>
-  <h2>${esc(s.guest_name)} · ${esc(s.unit_name)} ${STATUS_BADGE(s.status)} ${s.greeting_due ? '<span class="badge due">Greeting due</span>' : ""}</h2>
+  <h2>${esc(s.guest_name)} · ${esc(s.unit_name)} ${STATUS_BADGE(s.status)} ${s.greeting_due ? '<span class="badge due">Greeting due</span>' : ""}${RETURNING_BADGE(s)}</h2>
   <p class="muted small">${esc(s.checkin_date)} → ${esc(s.checkout_date)}${s.confirmation_code ? " · " + esc(s.confirmation_code) : ""}</p>
 
   <div class="card">
     <div class="grid2">
-      <div><label>Guest name (auto-filled when Airbnb's calendar feed includes it)</label>
+      <div><label>Guest name (auto-filled from Airbnb's calendar feed or message thread)</label>
         <input id="stay-guest-name" value="${esc(s.guest_name === "Guest (see Airbnb)" ? "" : s.guest_name)}" placeholder="e.g. Jason Luft"></div>
       <div><label>Door code / guest phone last 4 (auto-filled from the Airbnb calendar feed when available)</label>
         <input id="stay-phone4" value="${esc(s.phone_last4 || "")}" placeholder="e.g. 7412" maxlength="8"></div>
@@ -551,7 +576,11 @@ async function openStay(stayId) {
   <div class="card">
     <h3>Guest review (post-checkout)</h3>
     <div class="row" style="margin-bottom:10px">
-      <button onclick="genReviews(${s.id}, this)">Generate Review (3 humor levels)</button>
+      <button onclick="genReviews(${s.id}, this)">${reviews.length ? "Regenerate reviews" : "Generate Review (3 humor levels)"}</button>
+      ${s.review_posted_at
+        ? `<span class="badge sent">review posted ${esc(s.review_posted_at.slice(0, 10))}</span>
+           <button class="ghost" onclick="markReviewPosted(${s.id}, false, this)">Undo</button>`
+        : `<button class="secondary" onclick="markReviewPosted(${s.id}, true, this)">✓ Mark review posted</button>`}
     </div>
     <div id="reviews-area">${reviews.length ? reviews.map(renderReview).join("") : `<span class="muted small">No review variants yet.</span>`}</div>
   </div>`;
@@ -648,10 +677,32 @@ function renderReview(r) {
   return `<div class="card" style="margin-bottom:10px">
     <div class="row" style="justify-content:space-between">
       <b>${HUMOR_LABELS[r.humor_level] || r.humor_level}</b>
-      <button class="ghost" onclick="copyText(document.getElementById('rev-${r.humor_level}').value)">Copy</button>
+      <span>
+        <button class="ghost" onclick="copyText(document.getElementById('rev-${r.humor_level}').value)">Copy</button>
+        <button class="secondary" onclick="reviewAssist(document.getElementById('rev-${r.humor_level}').value, this)" title="Opens Airbnb's review form and fills this text in. You pick the stars and press Submit.">Open in Airbnb (fill only)</button>
+      </span>
     </div>
     <textarea id="rev-${r.humor_level}">${esc(r.content)}</textarea>
   </div>`;
+}
+
+async function markReviewPosted(stayId, posted, btn) {
+  busy(btn, true);
+  try {
+    await api(`/api/stays/${stayId}/review-posted`, { method: "POST", body: { posted } });
+    toast(posted ? "Marked as posted ✓ — it's off the Reviews due list" : "Unmarked");
+    openStay(stayId);
+  } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
+}
+
+async function reviewAssist(text, btn) {
+  const stayId = currentStayId;
+  await copyText(text);
+  busy(btn, true);
+  try {
+    const r = await api(`/api/stays/${stayId}/review-assist`, { method: "POST", body: { content: text } });
+    toast(r.detail);
+  } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
 }
 
 function renderContextBanner(source, note) {
@@ -745,6 +796,94 @@ async function auditSuggest(unitId, payload, btn) {
   } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
 }
 
+/* ---------------- Health ---------------- */
+
+function fmtTime(iso) {
+  return iso ? esc(iso.replace("T", " ").slice(0, 16)) + " UTC" : "never";
+}
+
+async function renderHealth() {
+  main.innerHTML = `<div class="muted">Loading…</div>`;
+  const h = await api("/api/health");
+  const ok = (good, yes, no) => good ? `<span class="health-ok">✓ ${yes}</span>` : `<span class="health-bad">✗ ${no}</span>`;
+  let html = `<h2>Health</h2>`;
+
+  html += `<div class="card"><h3>App</h3>
+    <p>Running since ${fmtTime(h.app.started_at)}.</p>`;
+  const changes = h.app.uncommitted_changes;
+  if (changes === null) {
+    html += `<p class="muted small">Couldn't check for uncommitted code changes (git not available).</p>`;
+  } else if (changes.length) {
+    html += `<p class="health-bad">⚠ ${changes.length} file(s) in the app folder were changed but never committed —
+      possibly another Claude session editing here. A <code>git pull</code> will refuse to run until they're committed or discarded.</p>
+      <pre class="mono small">${changes.map(esc).join("\n")}</pre>`;
+  } else {
+    html += `<p>${ok(true, "No uncommitted code changes")}</p>`;
+  }
+  html += `<p>${ok(!h.airbnb_session_expired, "Airbnb login OK", "Airbnb login expired — use Browser assist on any draft to log in again")}</p></div>`;
+
+  const sum = h.calendar.summary;
+  html += `<div class="card"><h3>Calendar sync</h3>
+    <p>Last sync: ${fmtTime(h.calendar.last_sync)}${sum ? ` — ${sum.added} added, ${sum.updated} updated, ${sum.unchanged} unchanged` : ""}.
+      <button class="secondary small" onclick="healthSync(this)">↻ Sync now</button></p>
+    <p>${ok(h.calendar.hosting_feed_set, "Guest-name calendar (Hosting Schedules) connected", "Guest-name calendar not set — names will often be missing (Settings)")}</p>
+    ${sum && sum.errors && sum.errors.length
+      ? `<p class="health-bad">Errors from the last sync:</p><ul>${sum.errors.map(e => `<li>${esc(e)}</li>`).join("")}</ul>`
+      : `<p>${ok(true, "No sync errors")}</p>`}
+    <p class="muted small">Morning queue last ran ${fmtTime(h.queue.last_run)} · reviews last auto-drafted ${fmtTime(h.reviews.last_auto_run)}</p></div>`;
+
+  html += `<div class="card"><h3>Units</h3><table><thead><tr><th>Unit</th><th>Airbnb calendar feed</th><th>Template</th><th>Door codes from Airbnb</th></tr></thead><tbody>`;
+  for (const u of h.units) {
+    const pct = u.stays_with_code ? Math.round(100 * (u.stays_with_code - u.phone_missing) / u.stays_with_code) : null;
+    html += `<tr><td><b>${esc(u.name)}</b></td>
+      <td>${ok(u.feed_set, "set", "missing — add it on the unit's page")}</td>
+      <td>${u.template_version ? "v" + u.template_version : '<span class="health-bad">none</span>'}</td>
+      <td>${pct === null ? '<span class="muted">no stays yet</span>' : `${pct}% of ${u.stays_with_code} stays`}${u.door_code_fallback ? ' <span class="badge sent" title="Missing codes fall back to the Airbnb app">fallback on</span>' : ""}</td></tr>`;
+  }
+  html += `</tbody></table></div>`;
+
+  html += `<div class="card"><h3>Needs attention (next 14 days)</h3>`;
+  if (!h.attention.length) {
+    html += `<p>${ok(true, "Every upcoming stay has what its greeting needs")}</p>`;
+  } else {
+    html += `<table><thead><tr><th>Check-in</th><th>Guest</th><th>Unit</th><th>Problem</th><th></th></tr></thead><tbody>`;
+    for (const a of h.attention) {
+      html += `<tr><td>${esc(a.checkin_date)}</td><td>${esc(a.guest_name)}</td><td>${esc(a.unit_name)}</td>
+        <td>${a.problems.map(esc).join("<br>")}</td>
+        <td><button class="ghost" onclick="openStay(${a.stay_id})">Fix →</button></td></tr>`;
+    }
+    html += `</tbody></table><p class="muted small">Names are also filled in automatically from the Airbnb message thread when the morning queue runs.</p>`;
+  }
+  html += `</div>`;
+
+  const dupes = h.duplicates.stays + h.duplicates.queue;
+  html += `<div class="card"><h3>Duplicates</h3>
+    <p>${ok(dupes === 0, "No duplicate stays or queue cards", `${h.duplicates.stays} duplicated reservation(s), ${h.duplicates.queue} duplicated queue card(s)`)}
+    ${dupes ? `<button onclick="healthMerge(this)">Merge duplicates</button>` : ""}</p>
+    <p>${ok(h.safeguards.stays_unique && h.safeguards.queue_unique, "Duplicate safeguards active", "Duplicate safeguards off until duplicates are merged")}</p></div>`;
+
+  main.innerHTML = html;
+}
+
+async function healthSync(btn) {
+  busy(btn, true);
+  try {
+    const r = await api("/api/health/sync", { method: "POST" });
+    toast(`Synced: ${r.added} added, ${r.updated} updated${r.errors.length ? ` — ${r.errors.length} error(s)` : ""}`, r.errors.length > 0);
+    renderHealth();
+  } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
+}
+
+async function healthMerge(btn) {
+  if (!confirm("Merge duplicate stays and queue cards? The best copy of each is kept.")) return;
+  busy(btn, true);
+  try {
+    const r = await api("/api/health/merge-duplicates", { method: "POST" });
+    toast(`Merged: removed ${r.stays_removed} duplicate stay(s), ${r.queue_removed} duplicate card(s) ✓`);
+    renderHealth();
+  } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
+}
+
 /* ---------------- Settings ---------------- */
 
 async function renderSettings() {
@@ -770,6 +909,15 @@ async function renderSettings() {
       <div><label>Default check-in time</label><input id="set-ci" value="${esc(s.default_checkin_time)}"></div>
       <div><label>Default checkout time</label><input id="set-co" value="${esc(s.default_checkout_time)}"></div>
     </div>
+  </div>
+  <div class="card">
+    <h3>Automatic drafts</h3>
+    <label><input type="checkbox" id="set-auto-reviews" ${s.auto_reviews_enabled ? "checked" : ""}>
+      Draft guest reviews automatically the morning after checkout <span class="muted">(never posted — they wait on the stay page)</span></label>
+    <label><input type="checkbox" id="set-midstay" ${s.midstay_enabled ? "checked" : ""}>
+      Queue a mid-stay check-in message the day after arrival (stays of 2+ nights; still needs your Send click)</label>
+    <label>Mid-stay message <span class="muted">(merge fields: {{guest_first_name}}, {{unit_name}}, {{host_signature}})</span></label>
+    <textarea id="set-midstay-template">${esc(s.midstay_template || "")}</textarea>
   </div>
   <div class="card">
     <h3>Calendar auto-sync</h3>
@@ -803,7 +951,10 @@ async function saveSettings(btn) {
       host_signature: $("#set-sig").value,
       default_checkin_time: $("#set-ci").value, default_checkout_time: $("#set-co").value,
       core_items: core, listing_aliases: aliases,
-      hosting_ics_url: $("#set-hosting-ics").value.trim() };
+      hosting_ics_url: $("#set-hosting-ics").value.trim(),
+      auto_reviews_enabled: $("#set-auto-reviews").checked,
+      midstay_enabled: $("#set-midstay").checked,
+      midstay_template: $("#set-midstay-template").value };
     const key = $("#set-key").value.trim();
     if (key) body.api_key = key;
     await api("/api/settings", { method: "PUT", body });

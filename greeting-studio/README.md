@@ -77,10 +77,14 @@ playwright install chromium
      clipboard path is the fallback. Log in to Airbnb in that window the first time; the
      profile persists in `.pw-profile/`.
    - **Mark as sent & log**: records the final text against the stay.
-6. **Generate Review** — after checkout, one click produces three host-review variants
-   (subtle / medium / full whimsy): funny and clever but always kind, drawing playful
-   observations only from the guest's actual messages, never negative or private, closing
-   with a genuine recommendation. Edit and copy — never auto-posted.
+6. **Reviews** — the morning after checkout, three host-review variants (subtle /
+   medium / full whimsy) are drafted automatically from the guest's whole Airbnb thread:
+   funny and clever but always kind, never negative or private, closing with a genuine
+   recommendation. The Dashboard's **Reviews due** list shows every guest still waiting
+   for a review and how many of Airbnb's 14 days are left. On the stay page:
+   **Regenerate reviews**, **Copy**, **Open in Airbnb (fill only)** — opens the review
+   form and types the text into the public-review box, but never picks star ratings and
+   never presses Submit — and **Mark review posted** to clear it from the list.
 
 ## Day-of-arrival queue + one-click send
 
@@ -97,8 +101,23 @@ then drafts a welcome message for every stay checking in **today**, fully unatte
   and party size, merged into the same stays by confirmation code. Listing-name →
   unit mapping is the editable `listing_aliases` JSON in Settings.
 
-A stay whose guest name is still unknown is queued as **needs setup** — the app
-will never send "Hi Guest," to anyone.
+If the calendar feeds left out a guest's name, the queue reads it from the Airbnb
+message thread ("Sent by Melissa · Booker") and fills it in on the stay. A stay whose
+name still can't be found is queued as **needs setup** — the app will never send
+"Hi Guest," to anyone.
+
+The Cosmopolitan and The Midnight Nook use Airbnb-synced locks, so when a guest has no
+phone number on file the door code reads "listed in your Airbnb app" instead of
+blocking the message (`door_code_fallback` in the unit's amenities, set by
+`load_templates.py`).
+
+**Returning guests** (same full name, or same first name + phone last 4, at any unit)
+get a "returning guest" badge, and the drafted greeting welcomes them back.
+
+**Mid-stay check-in:** the day after arrival, stays of two nights or more also get a
+short "how's everything?" note in the queue — a chance to fix a problem before it
+becomes a review. Edit the wording or turn it off under Settings → Automatic drafts.
+Like everything else, it only goes out when you click Send.
 
 - Uses the unit's latest template with all merge fields substituted; if the guest
   left a booking message (or the best-effort Airbnb thread reader finds their
@@ -106,7 +125,7 @@ will never send "Hi Guest," to anyone.
 - A draft with any unresolved value (e.g. Wi-Fi missing from the unit's Amenities)
   is flagged **needs setup** and physically cannot be sent until fixed + requeued.
 - The **Today's Arrivals** section at the top of the Dashboard shows one card per
-  guest: editable draft + a single **Send** button. A macOS notification summarizes
+  guest: editable draft + a single **Send** button. A desktop notification summarizes
   the morning run.
 
 **Send** is the only human gate — clicking it is your approval. It drives the
@@ -119,9 +138,43 @@ success the row is marked sent and logged to the stay's history; on failure
 Every send attempt is also appended to `send_audit.log`, a plain-text record
 independent of the database.
 
-The app must be running for the morning job (leave `python run.py` up, or just
-start it when you sit down — the startup catch-up builds the queue immediately).
-Sends require Playwright: `pip install playwright && playwright install chromium`.
+The app must be running for the morning job — see **Keeping it running** below (the
+startup catch-up builds the queue immediately if 7 AM was missed). Sends require
+Playwright: `pip install playwright && playwright install chromium`.
+
+## Keeping it running (Windows)
+
+Run once, in PowerShell **as Administrator**, from this folder:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install_autostart.ps1
+```
+
+This registers a Task Scheduler task that starts the app hidden when you log in, and
+re-checks every 10 minutes. The launcher (`start_hidden.ps1`) is a watchdog: if the app
+stops answering for 3 minutes it is killed (including uvicorn's child process, which
+used to keep port 8321 locked) and restarted. Output goes to `app.log` / `app_error.log`.
+
+| Script | Does |
+|---|---|
+| `start_app.ps1` | Restart the app now (re-enables the task) |
+| `stop_app.ps1` | Stop the app and pause auto-start until `start_app.ps1` |
+| `uninstall_autostart.ps1` | Remove the task completely |
+
+## Health page
+
+The **Health** tab replaces the old `check_*.py` / PowerShell debugging scripts:
+
+- whether the Airbnb login is still valid, and when the calendars last synced (with a
+  **Sync now** button) and the morning queue / review auto-draft last ran;
+- per unit: calendar feed set, template version, and how many stays came with a
+  phone number for the door code;
+- **Needs attention** — stays in the next 14 days missing a name, door code or
+  confirmation code, each with a Fix link;
+- duplicate stays / queue cards, with a one-click **Merge duplicates**, and whether
+  the database safeguards against new duplicates are on;
+- a warning if files in the app folder were changed but never committed (for example
+  by another Claude session) — `git pull` refuses to run until that's resolved.
 
 ## Exporting / pasting Airbnb threads
 
@@ -173,8 +226,22 @@ as-is (that's how merge-field names survive into templates).
 ## Settings
 
 The Settings tab covers the API key (status + session override; the durable place is
-`.env`), the Claude model, your host signature, default check-in/checkout times, and the
-core-information checklist that drives the audit.
+`.env`), the Claude models, your host signature, default check-in/checkout times,
+**Automatic drafts** (auto-drafted reviews on/off, mid-stay message on/off + wording),
+calendar auto-sync, and the core-information checklist that drives the audit.
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest tests
+```
+
+The tests never call Claude or Airbnb: each uses a throwaway database, Claude is
+replaced by a fake, and the browser tests run against local copies of Airbnb's
+thread / reservation markup. They can't prove Airbnb hasn't changed its pages since —
+if the review assist stops finding the review box, `debug_review_form.png` shows
+what the page looked like.
 
 ## Project layout
 
@@ -187,8 +254,12 @@ greeting-studio/
     claude.py          # Anthropic API wrapper + prompt loader
     parsers.py         # thread / CSV / JSON / .ics parsing
     audit.py           # consistency-audit engine
-    browser_assist.py  # optional Playwright fill-only assist
+    browser_assist.py  # Playwright: read thread, send, fill-only assists
+    queue.py           # calendar sync + morning queue
+    maintenance.py     # Health page report + duplicate merging
   prompts/             # editable prompt files
   static/              # single-page frontend
   sample_data/         # example imports to try
+  tests/               # pytest suite (python -m pytest tests)
+  *.ps1                # Windows auto-start / watchdog scripts
 ```

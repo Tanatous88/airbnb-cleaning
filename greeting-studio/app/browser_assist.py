@@ -5,9 +5,11 @@ so your Airbnb login sticks between uses — no credentials are ever stored by
 the app. Log in manually the first time a window opens.
 
   fill_airbnb_message  — legacy assist: fills the box and stops (never sends)
-  read_thread_messages — best-effort scrape of guest messages (for drafting)
+  read_thread          — best-effort scrape of guest messages + guest name
   send_airbnb_message  — fills the box AND submits; only ever called after the
                          host clicks Send on the dashboard
+  fill_airbnb_review   — opens the host review form and fills the public text;
+                         never picks star ratings, never submits
 
 The reservation-details page (/hosting/reservations/details/<confirmation
 code>) has NO message box or message history on it — it's a summary page
@@ -26,6 +28,7 @@ Requires:  pip install playwright && playwright install chromium
 """
 import os
 import re
+import threading
 
 from playwright.sync_api import sync_playwright
 
@@ -70,6 +73,30 @@ _GUEST_MESSAGE_JS = r"""
   return out;
 }
 """
+
+# Same stable aria-label, read for the guest's display name instead of their
+# message text: "Sent by Melissa · Booker at 11:31 AM. Tap to go to ...".
+# Used to fill in a stay whose calendar feed didn't include the guest's name.
+_GUEST_NAME_JS = r"""
+() => {
+  for (const btn of document.querySelectorAll('button[aria-label^="Sent by "]')) {
+    const m = (btn.getAttribute('aria-label') || '')
+      .match(/^Sent by\s+(.+?)\s*·\s*(Booker|Guest)\b/i);
+    if (m) return m[1].trim();
+  }
+  return '';
+}
+"""
+
+
+def _guest_name_from_text(dialog_text: str) -> str:
+    """Fallback for _GUEST_NAME_JS: the first "Name · Booker 11:31 AM" header
+    line in the thread's rendered text."""
+    for line in (dialog_text or "").splitlines():
+        m = _SENDER_HEADER_RE.match(line.strip())
+        if m and m.group("role").lower() in _GUEST_ROLES:
+            return m.group("name").strip()
+    return ""
 
 
 def _extract_guest_lines(dialog_text: str) -> list:
@@ -291,12 +318,52 @@ def fill_airbnb_message(confirmation_code: str, text: str, wait_seconds: int = 3
         return detail
 
 
-def read_thread_messages(confirmation_code: str, max_messages: int = 30) -> list:
-    """Best-effort scrape of the guest's messages for draft/review personalization.
-    Returns [] on anything unexpected — the caller falls back to the stay's
-    stored booking message."""
+def _collect_thread(page, max_messages: int = 30) -> dict:
+    """Read an already-open message thread: the guest's messages and the
+    guest's display name. Split out from read_thread so it can be tested
+    against saved copies of Airbnb's markup without touching Airbnb."""
+    texts = []
+    try:
+        for t in (page.evaluate(_GUEST_MESSAGE_JS) or []):
+            t = (t or "").strip()
+            if t and t not in texts:
+                texts.append(t)
+    except Exception:
+        pass  # markup may not match — fall through to weaker methods below
+    dialog = page.query_selector("[role='dialog']")
+    raw_text = (dialog.inner_text() if dialog else page.inner_text("body")) or ""
+    if not texts:
+        # Fallback 1: parse the dialog's rendered text by sender-header line.
+        for t in _extract_guest_lines(raw_text):
+            if t not in texts:
+                texts.append(t)
+    if not texts:
+        # Fallback 2: the older class/testid-based guess.
+        for selector in GUEST_MESSAGE_SELECTORS:
+            for el in page.query_selector_all(selector)[:max_messages * 2]:
+                t = (el.inner_text() or "").strip()
+                if t and t not in texts and len(t) > 2:
+                    texts.append(t)
+            if texts:
+                break
+    try:
+        name = (page.evaluate(_GUEST_NAME_JS) or "").strip()
+    except Exception:
+        name = ""
+    if not name:
+        name = _guest_name_from_text(raw_text)
+    # Keep the most RECENT messages when there are more than the cap —
+    # texts is in chronological (oldest-first) order, and recent messages
+    # (post-stay "had a great time!" comments) matter far more for reviews
+    # than early booking-logistics questions.
+    return {"messages": texts[-max_messages:], "guest_name": name[:60]}
+
+
+def read_thread(confirmation_code: str, max_messages: int = 30) -> dict:
+    """Open the reservation's message thread and read it. Returns
+    {"messages": [...guest messages...], "guest_name": "Melissa" or ""}."""
     if not confirmation_code:
-        return []
+        return {"messages": [], "guest_name": ""}
     with sync_playwright() as pw:
         context = pw.chromium.launch_persistent_context(PROFILE_DIR, headless=False)
         try:
@@ -309,37 +376,14 @@ def read_thread_messages(confirmation_code: str, max_messages: int = 30) -> list
             except Exception:
                 pass  # diagnostic aid only, never fatal
             _check_logged_in(page)
-            texts = []
-            try:
-                for t in (page.evaluate(_GUEST_MESSAGE_JS) or []):
-                    t = (t or "").strip()
-                    if t and t not in texts:
-                        texts.append(t)
-            except Exception:
-                pass  # markup may not match — fall through to weaker methods below
-            if not texts:
-                # Fallback 1: parse the dialog's rendered text by sender-header line.
-                dialog = page.query_selector("[role='dialog']")
-                raw_text = (dialog.inner_text() if dialog else page.inner_text("body")) or ""
-                for t in _extract_guest_lines(raw_text):
-                    if t not in texts:
-                        texts.append(t)
-            if not texts:
-                # Fallback 2: the older class/testid-based guess.
-                for selector in GUEST_MESSAGE_SELECTORS:
-                    for el in page.query_selector_all(selector)[:max_messages * 2]:
-                        t = (el.inner_text() or "").strip()
-                        if t and t not in texts and len(t) > 2:
-                            texts.append(t)
-                    if texts:
-                        break
-            # Keep the most RECENT messages when there are more than the cap —
-            # texts is in chronological (oldest-first) order, and recent
-            # messages (post-stay "had a great time!" comments) matter far
-            # more for reviews than early booking-logistics questions.
-            return texts[-max_messages:]
+            return _collect_thread(page, max_messages)
         finally:
             context.close()
+
+
+def read_thread_messages(confirmation_code: str, max_messages: int = 30) -> list:
+    """Guest messages only (see read_thread)."""
+    return read_thread(confirmation_code, max_messages)["messages"]
 
 
 def send_airbnb_message(confirmation_code: str, text: str) -> str:
@@ -388,3 +432,148 @@ def send_airbnb_message(confirmation_code: str, text: str) -> str:
             return "Message submitted to the Airbnb thread."
         finally:
             context.close()
+
+
+# ---------------------------------------------------------------------------
+# Review assist (fill-only)
+# ---------------------------------------------------------------------------
+
+DEBUG_REVIEW_SCREENSHOT_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "debug_review_form.png"
+)
+
+# The message-thread modal shows a "How was your guest? / Leave a review"
+# button (seen in a real screenshot); the reservation page shows a "Leave a
+# review for <name>" card. Exact-text matches first.
+REVIEW_BUTTON_SELECTORS = [
+    "button:text-is('Leave a review')",
+    "a:text-is('Leave a review')",
+    "button:has-text('Leave a review')",
+    "a:has-text('Leave a review')",
+    "button:has-text('Write a review')",
+    "a:has-text('Write a review')",
+    "a[href*='/review']",
+]
+
+# Picks the visible text box for the PUBLIC review. It must look like a
+# review field, and must NOT look like the chat's "Write a message..." box:
+# filling that by mistake would put the review one click away from being
+# sent to the guest as a message.
+_FIND_REVIEW_BOX_JS = r"""
+() => {
+  const boxes = [...document.querySelectorAll('textarea, [contenteditable="true"]')];
+  const label = el => [el.getAttribute('aria-label'), el.getAttribute('placeholder'),
+                       el.getAttribute('name'), el.id].join(' ');
+  const visible = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const hit = boxes.find(el => visible(el) && /review|public|feedback|experience/i.test(label(el))
+                               && !/message/i.test(label(el)));
+  if (!hit) return null;
+  if (!hit.id) hit.id = 'gs-review-box-' + Date.now();
+  return '#' + CSS.escape(hit.id);
+}
+"""
+
+
+def _open_review_form(page) -> bool:
+    """Click "Leave a review". Some of Airbnb's cards sit under a wrapper that
+    swallows real mouse clicks, so if a normal click times out, the click
+    event is dispatched to the element directly."""
+    for selector in REVIEW_BUTTON_SELECTORS:
+        for el in page.query_selector_all(selector):
+            try:
+                if not el.is_visible():
+                    continue
+                try:
+                    el.click(timeout=4_000)
+                except Exception:
+                    el.dispatch_event("click")
+                page.wait_for_timeout(2_500)
+                return True
+            except Exception:
+                continue
+    return False
+
+
+def _fill_review_text(page, text: str, timeout_ms: int = 8_000) -> bool:
+    """Fill the public review box if it's showing. Returns False (and touches
+    nothing) if no box that clearly belongs to the review is on screen."""
+    deadline = timeout_ms
+    while deadline > 0:
+        selector = page.evaluate(_FIND_REVIEW_BOX_JS)
+        if selector:
+            box = page.query_selector(selector)
+            box.click()
+            if box.evaluate("el => el.tagName") == "TEXTAREA":
+                box.fill(text)
+            else:
+                box.type(text)
+            return True
+        page.wait_for_timeout(500)
+        deadline -= 500
+    return False
+
+
+def fill_airbnb_review(confirmation_code: str, text: str, keep_open_seconds: int = 900) -> str:
+    """Open the guest's review form in a visible window and fill the public
+    review text. The window stays open (until you close it, or 15 minutes)
+    so you can pick the star ratings and press Submit yourself.
+
+    Returns a status message as soon as the form is open — the browser runs
+    in a background thread so the dashboard isn't stuck waiting on it."""
+    done = threading.Event()
+    outcome = {}
+
+    def run():
+        try:
+            with sync_playwright() as pw:
+                context = pw.chromium.launch_persistent_context(PROFILE_DIR, headless=False)
+                page = context.pages[0] if context.pages else context.new_page()
+                _open_reservation(page, confirmation_code)
+                try:
+                    _check_logged_in(page)
+                except AirbnbSessionExpired:
+                    outcome["detail"] = ("Landed on an Airbnb login page — log in in that window, "
+                                         "then click the review button again.")
+                    done.set()
+                    _wait_until_closed(page, keep_open_seconds)
+                    context.close()
+                    return
+                opened = _open_review_form(page)
+                if not opened and _click_into_message_thread(page):
+                    opened = _open_review_form(page)
+                filled = opened and _fill_review_text(page, text)
+                try:
+                    page.screenshot(path=DEBUG_REVIEW_SCREENSHOT_PATH)
+                except Exception:
+                    pass
+                if filled:
+                    outcome["detail"] = ("Review text filled in. Pick the star ratings and press "
+                                         "Submit in the Airbnb window — nothing was submitted.")
+                elif opened:
+                    outcome["detail"] = ("Review form opened, but the public-review box isn't on "
+                                         "this step yet. The text is on your clipboard — paste it "
+                                         "when you reach that box.")
+                else:
+                    outcome["detail"] = ("Couldn't find the \"Leave a review\" button (Airbnb's page "
+                                         "may have changed). The text is on your clipboard — open "
+                                         "the review from the reservation page and paste it.")
+                done.set()
+                _wait_until_closed(page, keep_open_seconds)
+                context.close()
+        except Exception as e:
+            outcome.setdefault("error", str(e))
+            done.set()
+
+    threading.Thread(target=run, daemon=True).start()
+    if not done.wait(timeout=150):
+        return "Still opening the Airbnb window — it should appear shortly."
+    if "error" in outcome and "detail" not in outcome:
+        raise RuntimeError(outcome["error"])
+    return outcome["detail"]
+
+
+def _wait_until_closed(page, seconds: int) -> None:
+    try:
+        page.wait_for_event("close", timeout=seconds * 1000)
+    except Exception:
+        pass
