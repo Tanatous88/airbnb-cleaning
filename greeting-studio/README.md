@@ -183,6 +183,21 @@ add `SMTP_USER` and `SMTP_PASSWORD` to `.env` (for Gmail, an *app password* from
 Account → Security → 2-Step Verification → App passwords), restart the app, then use
 **Send a test now**.
 
+## Using the app from your phone, anywhere (Tailscale)
+
+With Tailscale on the AI PC and your phone, open `http://<AI PC's Tailscale IP>:8321`
+on the phone (`tailscale ip -4` on the PC shows the IP). If it loads on the PC but not
+the phone, Windows Firewall is blocking it; allow the port for Tailscale devices only,
+from an Administrator PowerShell:
+
+```powershell
+New-NetFirewallRule -DisplayName "Greeting Studio (Tailscale only)" -Direction Inbound -Protocol TCP -LocalPort 8321 -RemoteAddress 100.64.0.0/10 -Action Allow
+```
+
+The app has no login, so don't open the port any wider than that. The morning summary
+email links to the Tailscale address automatically when Tailscale is running (or set
+your own under Settings → Morning summary email).
+
 ## Weekend guide link
 
 Welcome messages for stays over a Friday, Saturday or Sunday night link to the Palouse

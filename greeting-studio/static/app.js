@@ -1050,6 +1050,8 @@ async function renderSettings() {
     <label><input type="checkbox" id="set-summary-on" ${s.summary_email_enabled ? "checked" : ""}> Send me the morning summary</label>
     <label>Send to</label>
     <input id="set-summary-to" type="email" value="${esc(s.summary_email_to || "")}" placeholder="you@example.com">
+    <label>Dashboard link in the email <span class="muted">(leave blank to use ${esc(s.dashboard_link_auto || "this PC's address")} — the Tailscale address when Tailscale is on)</span></label>
+    <input id="set-dashboard-link" value="${esc(s.dashboard_link || "")}" placeholder="${esc(s.dashboard_link_auto || "")}">
     <div class="row" style="margin-top:8px"><button class="secondary small" onclick="sendSummaryNow(this)">Send a test now</button>
       ${s.summary_email_last_sent ? `<span class="muted small">Last sent ${esc(s.summary_email_last_sent.replace("T", " ").slice(0, 16))} UTC</span>` : ""}</div>
     ${s.summary_email_last_error ? `<p class="small" style="color:var(--red)">Last attempt failed: ${esc(s.summary_email_last_error)}</p>` : ""}
@@ -1120,6 +1122,7 @@ async function saveSettings(btn) {
       welcome_days_before: Number($("#set-welcome-lead").value),
       summary_email_enabled: $("#set-summary-on").checked,
       summary_email_to: $("#set-summary-to").value.trim(),
+      dashboard_link: $("#set-dashboard-link").value.trim(),
       weekend_guide_url: $("#set-guide-url").value.trim(),
       hide_browser: $("#set-hide-browser").checked,
       midstay_enabled: $("#set-midstay").checked,
@@ -1145,7 +1148,8 @@ async function saveSettingsQuietly() {
   // so "Send a test now" uses the address just typed, without a separate Save click
   await api("/api/settings", { method: "PUT", body: {
     summary_email_enabled: $("#set-summary-on").checked,
-    summary_email_to: $("#set-summary-to").value.trim() } });
+    summary_email_to: $("#set-summary-to").value.trim(),
+    dashboard_link: $("#set-dashboard-link").value.trim() } });
 }
 
 /* ---------------- boot ---------------- */

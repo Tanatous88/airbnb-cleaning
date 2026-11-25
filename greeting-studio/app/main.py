@@ -1277,6 +1277,7 @@ class SettingsIn(BaseModel):
     weekend_guide_url: Optional[str] = None
     summary_email_enabled: Optional[bool] = None
     summary_email_to: Optional[str] = None
+    dashboard_link: Optional[str] = None
 
 
 @app.get("/api/settings")
@@ -1305,6 +1306,8 @@ def get_settings():
                                  or queue_mod.WEEKEND_GUIDE_URL,
             "summary_email_enabled": db.get_setting(conn, "summary_email_enabled", "0") == "1",
             "summary_email_to": db.get_setting(conn, "summary_email_to", ""),
+            "dashboard_link": db.get_setting(conn, "dashboard_link", ""),
+            "dashboard_link_auto": notify.app_url(),
             "smtp_configured": notify.smtp_configured(),
             "summary_email_last_sent": db.get_setting(conn, "summary_email_last_sent", ""),
             "summary_email_last_error": db.get_setting(conn, "summary_email_last_error", ""),
@@ -1332,6 +1335,11 @@ def update_settings(body: SettingsIn):
             if url and not url.startswith(("https://", "http://")):
                 raise HTTPException(status_code=400, detail="The weekend guide link must start with https://")
             db.set_setting(conn, "weekend_guide_url", url or queue_mod.WEEKEND_GUIDE_URL)
+        if body.dashboard_link is not None:
+            link = body.dashboard_link.strip()
+            if link and not link.startswith(("http://", "https://")):
+                raise HTTPException(status_code=400, detail="The dashboard link must start with http://")
+            db.set_setting(conn, "dashboard_link", link)
         if body.summary_email_to is not None:
             to = body.summary_email_to.strip()
             if to and ("@" not in to or " " in to):

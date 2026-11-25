@@ -5,6 +5,7 @@ Sent through the host's own mail account over SMTP. The login lives only in
 address is a setting in the local database. Nothing here sends anything to a
 guest — it's a note to the host, with links back to the app.
 """
+import ipaddress
 import os
 import smtplib
 import socket
@@ -24,8 +25,36 @@ def smtp_configured() -> bool:
     return bool(os.environ.get("SMTP_USER", "").strip() and os.environ.get("SMTP_PASSWORD", "").strip())
 
 
-def app_url() -> str:
-    """The dashboard address as seen from another device on the home Wi-Fi."""
+TAILSCALE_NET = ipaddress.ip_network("100.64.0.0/10")
+
+
+def tailscale_ip() -> str:
+    """This PC's Tailscale address (100.64.0.0/10), or '' if it has none."""
+    try:
+        infos = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)
+    except OSError:
+        return ""
+    for info in infos:
+        ip = info[4][0]
+        try:
+            if ipaddress.ip_address(ip) in TAILSCALE_NET:
+                return ip
+        except ValueError:
+            continue
+    return ""
+
+
+def app_url(conn=None) -> str:
+    """The dashboard link for the summary email. In order: the address set in
+    Settings, this PC's Tailscale address (works from anywhere on the
+    tailnet), else its home Wi-Fi address."""
+    if conn is not None:
+        custom = db.get_setting(conn, "dashboard_link", "").strip()
+        if custom:
+            return custom
+    ts = tailscale_ip()
+    if ts:
+        return f"http://{ts}:{APP_PORT}"
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.connect(("10.255.255.255", 1))  # no packet is sent; just picks the LAN interface
@@ -52,7 +81,7 @@ def _arrives(iso: str, today: date) -> str:
 def build_summary(conn, today: date = None, link: str = None):
     """(subject, body, count). count is the number of things needing the host."""
     today = today or date.today()
-    link = link or app_url()
+    link = link or app_url(conn)
     rows = conn.execute(
         "SELECT q.kind, q.status, q.error, q.guest_name, u.name AS unit_name, "
         "s.checkin_date AS arrival_date FROM daily_queue q JOIN units u ON u.id = q.unit_id "
@@ -97,7 +126,8 @@ def build_summary(conn, today: date = None, link: str = None):
     if needs:
         subject += f" ({needs} need{'s' if needs == 1 else ''} setup)"
     body = "\n".join(lines) if lines else "Nothing waiting today.\n"
-    body += (f"\nOpen the dashboard (from home Wi-Fi): {link}\n"
+    where = "with Tailscale on" if "://100." in link else "from home Wi-Fi"
+    body += (f"\nOpen the dashboard ({where}): {link}\n"
              "Copy & open each message there, paste it into Airbnb, then click \"I sent it\".\n")
     return subject, body, len(welcome) + len(midstay) + len(due)
 

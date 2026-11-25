@@ -133,3 +133,21 @@ def test_morning_read_runs_off_screen_by_default(conn, monkeypatch):
     conn.commit()
     queue.read_thread_context(conn, conn.execute("SELECT * FROM stays WHERE id = ?", (sid,)).fetchone())
     assert seen["hidden"] is False
+
+
+def test_dashboard_link_prefers_setting_then_tailscale(conn, monkeypatch):
+    monkeypatch.setattr(notify.socket, "getaddrinfo",
+                        lambda *a, **k: [(2, 1, 6, "", ("192.168.1.20", 0)),
+                                         (2, 1, 6, "", ("100.101.102.103", 0))])
+    assert notify.app_url(conn) == "http://100.101.102.103:8321"
+    db.set_setting(conn, "dashboard_link", "http://my-pc:8321")
+    conn.commit()
+    assert notify.app_url(conn) == "http://my-pc:8321"
+    _, body, _ = notify.build_summary(conn, link="http://100.101.102.103:8321")
+    assert "with Tailscale on" in body
+
+
+def test_no_tailscale_falls_back_to_wifi_address(monkeypatch):
+    monkeypatch.setattr(notify.socket, "getaddrinfo", lambda *a, **k: [(2, 1, 6, "", ("192.168.1.20", 0))])
+    assert notify.tailscale_ip() == ""
+    assert notify.app_url().startswith("http://") and ":8321" in notify.app_url()

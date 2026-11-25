@@ -289,6 +289,8 @@ def init_db() -> None:
         "weekend_guide_url": "https://claude.ai/artifact/Aufucypx6pj1QuMLKwd5xq",
         "summary_email_enabled": "0",
         "summary_email_to": "",
+        # Optional override for the dashboard link in the summary email.
+        "dashboard_link": "",
     }
     for k, v in defaults.items():
         conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, v))
