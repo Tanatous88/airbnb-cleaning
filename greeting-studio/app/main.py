@@ -981,8 +981,11 @@ def get_queue():
     try:
         today = date.today().isoformat()
         rows = conn.execute(
-            "SELECT q.*, u.name AS unit_name FROM daily_queue q JOIN units u ON u.id = q.unit_id "
-            "WHERE q.checkin_date = ? ORDER BY q.status = 'sent', u.name", (today,)).fetchall()
+            "SELECT q.*, u.name AS unit_name, s.checkin_date AS arrival_date "
+            "FROM daily_queue q JOIN units u ON u.id = q.unit_id "
+            "LEFT JOIN stays s ON s.id = q.stay_id "
+            "WHERE q.checkin_date = ? ORDER BY q.status = 'sent', s.checkin_date, u.name",
+            (today,)).fetchall()
         summary_raw = db.get_setting(conn, "queue_last_summary", "")
         items = []
         for r in rows:
@@ -993,6 +996,7 @@ def get_queue():
             "today": today,
             "items": items,
             "manual_mode": db.get_setting(conn, "manual_mode", "1") == "1",
+            "welcome_days_before": queue_mod.welcome_lead_days(conn),
             "last_run": db.get_setting(conn, "queue_last_run", ""),
             "last_summary": json.loads(summary_raw) if summary_raw else None,
             "session_expired": db.get_setting(conn, "airbnb_session_expired", "") == "1",
@@ -1236,6 +1240,7 @@ class SettingsIn(BaseModel):
     midstay_template: Optional[str] = None
     auto_reviews_enabled: Optional[bool] = None
     manual_mode: Optional[bool] = None
+    welcome_days_before: Optional[int] = None
 
 
 @app.get("/api/settings")
@@ -1258,6 +1263,7 @@ def get_settings():
                                                db.DEFAULT_MIDSTAY_TEMPLATE),
             "auto_reviews_enabled": db.get_setting(conn, "auto_reviews_enabled", "1") == "1",
             "manual_mode": db.get_setting(conn, "manual_mode", "1") == "1",
+            "welcome_days_before": queue_mod.welcome_lead_days(conn),
         }
     finally:
         conn.close()
@@ -1276,6 +1282,10 @@ def update_settings(body: SettingsIn):
             val = getattr(body, key)
             if val is not None:
                 db.set_setting(conn, key, "1" if val else "0")
+        if body.welcome_days_before is not None:
+            if not 0 <= body.welcome_days_before <= 3:
+                raise HTTPException(status_code=400, detail="Days before check-in must be 0-3")
+            db.set_setting(conn, "welcome_days_before", str(body.welcome_days_before))
         if body.midstay_template is not None:
             if not body.midstay_template.strip():
                 raise HTTPException(status_code=400, detail="Mid-stay message can't be empty")

@@ -130,15 +130,17 @@ async function renderDashboard() {
 
   const arrivals = queue.items.filter(i => (i.kind || "arrival") === "arrival");
   const midstays = queue.items.filter(i => i.kind === "midstay");
-  html += `<h2>Today's Arrivals ${arrivals.length ? `<span class="badge ${arrivals.some(i => i.status === "needs_setup") ? "due" : "reviewed"}">${arrivals.filter(i => i.status !== "sent").length} pending</span>` : ""}
+  const lead = queue.welcome_days_before ?? 1;
+  html += `<h2>Welcome messages to send ${arrivals.length ? `<span class="badge ${arrivals.some(i => i.status === "needs_setup") ? "due" : "reviewed"}">${arrivals.filter(i => i.status !== "sent").length} pending</span>` : ""}
     <button class="secondary small" style="float:right" onclick="runQueue(this)">↻ Rebuild queue now</button></h2>`;
-  html += `<p class="muted small">Drafts are generated automatically every morning at 7:00 AM Pacific
+  html += `<p class="muted small">For guests arriving ${lead === 0 ? "today" : lead === 1 ? "today or tomorrow" : `in the next ${lead} days`}
+    (change it in Settings). Drafts are generated automatically every morning at 7:00 AM Pacific
     (and on app start if the 7 AM run was missed). ${manualMode
       ? "For each one: <b>Copy &amp; open in Airbnb</b>, paste it into the guest's message thread and send it there, then click <b>I sent it</b>."
       : "Nothing sends without your Send click."}
     ${queue.last_run ? `Last run: ${esc(queue.last_run.replace("T", " ").slice(0, 16))} UTC.` : "No run yet today."}</p>`;
   html += arrivals.length ? arrivals.map(renderQueueCard).join("")
-                          : `<div class="card muted small">No check-ins today.</div>`;
+                          : `<div class="card muted small">No welcome messages to send — nobody arriving ${lead === 0 ? "today" : lead === 1 ? "today or tomorrow" : "soon"}.</div>`;
   if (midstays.length) {
     html += `<h2>Mid-stay check-ins <span class="badge reviewed">${midstays.filter(i => i.status !== "sent").length} pending</span></h2>
       <p class="muted small">A quick "how's everything?" the day after arrival, for stays of 2+ nights — a chance to fix problems before they become reviews. Edit the wording in Settings.</p>`;
@@ -199,7 +201,8 @@ function renderQueueCard(q) {
   const src = PERSONALIZATION_SOURCE[q.personalization_source];
   return `<div class="card">
     <div class="row" style="justify-content:space-between">
-      <b>${q.kind === "midstay" ? "Check-in note · " : ""}${esc(q.unit_name)} — ${esc(q.guest_name)}</b>
+      <b>${q.kind === "midstay" ? "Check-in note · " : ""}${esc(q.unit_name)} — ${esc(q.guest_name)}
+        ${q.kind !== "midstay" && q.arrival_date ? `<span class="muted small" style="font-weight:normal">· ${arrivalLabel(q.arrival_date)}</span>` : ""}</b>
       <span class="badge ${badge}">${label}</span>
     </div>
     ${src ? `<p class="small" style="color:${src.color};margin:2px 0 6px">${src.icon} ${src.text}</p>` : ""}
@@ -221,6 +224,15 @@ function renderQueueCard(q) {
                 <button class="ghost" onclick="queueAssist(${q.id})">Browser assist (fill only)</button>`}`}
          </div>`}
   </div>`;
+}
+
+function arrivalLabel(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const day = new Date(y, m - 1, d);
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  const diff = Math.round((day - now) / 86400000);
+  const when = day.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  return diff === 0 ? `arrives <b>today</b> (${when})` : diff === 1 ? `arrives tomorrow, ${when}` : `arrives ${when}`;
 }
 
 function copyAndOpenQueue(id, url, btn) {
@@ -1016,6 +1028,15 @@ async function renderSettings() {
       <span class="muted">(hides Auto-send, Browser assist and the Airbnb-login banner; the Copy &amp; open and I sent it buttons stay)</span></label>
   </div>
   <div class="card">
+    <h3>Welcome message timing</h3>
+    <label>Draft each guest's welcome message
+      <select id="set-welcome-lead" style="width:auto;display:inline-block">
+        ${[[0, "on check-in day"], [1, "the day before check-in"], [2, "2 days before check-in"]].map(([v, t]) =>
+          `<option value="${v}" ${s.welcome_days_before === v ? "selected" : ""}>${t}</option>`).join("")}
+      </select></label>
+    <p class="muted small">Guests arriving sooner than that (last-minute bookings, or a message you didn't get to) show up too.</p>
+  </div>
+  <div class="card">
     <h3>Automatic drafts</h3>
     <label><input type="checkbox" id="set-auto-reviews" ${s.auto_reviews_enabled ? "checked" : ""}>
       Draft guest reviews automatically the morning after checkout <span class="muted">(never posted — they wait on the stay page)</span></label>
@@ -1059,6 +1080,7 @@ async function saveSettings(btn) {
       hosting_ics_url: $("#set-hosting-ics").value.trim(),
       auto_reviews_enabled: $("#set-auto-reviews").checked,
       manual_mode: $("#set-manual-mode").checked,
+      welcome_days_before: Number($("#set-welcome-lead").value),
       midstay_enabled: $("#set-midstay").checked,
       midstay_template: $("#set-midstay-template").value };
     const key = $("#set-key").value.trim();

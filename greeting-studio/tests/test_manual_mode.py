@@ -73,3 +73,17 @@ def test_manual_mode_setting_round_trip(client):
     client.put("/api/settings", json={"manual_mode": False})
     assert client.get("/api/settings").json()["manual_mode"] is False
     assert client.get("/api/queue").json()["manual_mode"] is False
+
+
+def test_queue_shows_arrival_date_and_timing_setting(conn, client):
+    set_template(conn, "The Studio", "Hi {{guest_first_name}}! Door code: {{door_code}}.")
+    sid = add_stay(conn, "The Studio", "Pam Lee", 1, 3, code="HMPAM123", phone="1234")
+    queue.build_queue_for_today()
+    q = client.get("/api/queue").json()
+    assert q["welcome_days_before"] == 1
+    item = next(i for i in q["items"] if i["stay_id"] == sid)
+    assert item["arrival_date"] == conn.execute(
+        "SELECT checkin_date FROM stays WHERE id = ?", (sid,)).fetchone()[0]
+    assert client.put("/api/settings", json={"welcome_days_before": 0}).status_code == 200
+    assert client.get("/api/settings").json()["welcome_days_before"] == 0
+    assert client.put("/api/settings", json={"welcome_days_before": 9}).status_code == 400

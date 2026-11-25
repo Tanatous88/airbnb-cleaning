@@ -489,9 +489,22 @@ def _setup_problems(missing: list, scrape_note: str = "") -> str:
     return "; ".join(problems) + ". Then click Rebuild."
 
 
+def welcome_lead_days(conn) -> int:
+    """How many days before check-in the welcome message is drafted."""
+    try:
+        return max(0, min(3, int(db.get_setting(conn, "welcome_days_before", "1"))))
+    except ValueError:
+        return 1
+
+
 def _build_arrivals(conn, today: str, force: bool, summary: dict) -> None:
+    """Welcome messages for guests arriving between today and the lead day
+    (default: tomorrow). Today's arrivals are included too, so a last-minute
+    booking or a message not sent yesterday still shows up."""
+    last = (date.fromisoformat(today) + timedelta(days=welcome_lead_days(conn))).isoformat()
     stays = conn.execute(
-        "SELECT * FROM stays WHERE checkin_date = ? AND status != 'sent'", (today,)).fetchall()
+        "SELECT * FROM stays WHERE checkin_date >= ? AND checkin_date <= ? AND status != 'sent' "
+        "ORDER BY checkin_date", (today, last)).fetchall()
     for stay in stays:
         if _skip_existing(conn, stay["id"], today, force):
             summary["skipped"] += 1
@@ -564,7 +577,8 @@ def _build_midstays(conn, today_date: date, force: bool, summary: dict) -> None:
 
 def build_queue_for_today(force: bool = False) -> dict:
     """Sync calendars, then draft a welcome message for every stay checking in
-    today and a check-in note for every stay that arrived yesterday.
+    soon (see welcome_lead_days) and a check-in note for every stay that
+    arrived yesterday.
     Idempotent: stays already queued today are skipped unless force=True."""
     sync = sync_calendars()
     today_date = date.today()
@@ -590,7 +604,7 @@ def _notify(summary: dict) -> None:
     the same summary regardless."""
     if summary["queued"] == 0 and not summary.get("midstay"):
         return
-    text = f"{summary['queued']} arrival(s) queued for today"
+    text = f"{summary['queued']} welcome message(s) ready to send"
     if summary.get("midstay"):
         text += f", {summary['midstay']} mid-stay check-in(s)"
     if summary["needs_setup"]:

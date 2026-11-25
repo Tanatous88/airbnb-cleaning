@@ -122,3 +122,33 @@ def test_browser_error_is_one_readable_line():
                                         "run 'playwright install chromium'")
     other = RuntimeError("Page.goto: net::ERR_INTERNET_DISCONNECTED at https://www.airbnb.com\n╔══╗")
     assert queue._short_reason(other) == "net::ERR_INTERNET_DISCONNECTED at https://www.airbnb.com"
+
+
+def test_welcome_drafted_the_day_before_by_default(conn, env):
+    set_template(conn, "The Studio", TEMPLATE)
+    tomorrow = add_stay(conn, "The Studio", "Pam Lee", 1, 3, phone="1234")
+    later = add_stay(conn, "The Cottage", "Al Roe", 2, 4, phone="5678")
+    summary = queue.build_queue_for_today()
+    assert _card(conn, tomorrow)["message"] == "Hi Pam! Door code: 1234."
+    assert _card(conn, later) is None
+    assert summary["queued"] == 1
+
+
+def test_today_arrival_not_sent_yesterday_still_shows(conn, env):
+    set_template(conn, "The Studio", TEMPLATE)
+    missed = add_stay(conn, "The Studio", "Pam Lee", 0, 2, phone="1234")
+    done = add_stay(conn, "The Studio", "Al Roe", 0, 2, phone="5678")
+    conn.execute("UPDATE stays SET status = 'sent' WHERE id = ?", (done,))
+    conn.commit()
+    queue.build_queue_for_today()
+    assert _card(conn, missed)["status"] == "ready"
+    assert _card(conn, done) is None  # already welcomed yesterday
+
+
+def test_same_day_setting(conn, env):
+    db.set_setting(conn, "welcome_days_before", "0")
+    conn.commit()
+    set_template(conn, "The Studio", TEMPLATE)
+    tomorrow = add_stay(conn, "The Studio", "Pam Lee", 1, 3, phone="1234")
+    queue.build_queue_for_today()
+    assert _card(conn, tomorrow) is None

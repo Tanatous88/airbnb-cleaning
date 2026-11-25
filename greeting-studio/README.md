@@ -90,7 +90,9 @@ playwright install chromium
 
 Every morning at **7:00 AM Pacific** (and on app start, if the 7 AM run was missed —
 e.g. the machine was asleep), a scheduled job first **auto-syncs the calendars**,
-then drafts a welcome message for every stay checking in **today**, fully unattended:
+then drafts a welcome message for every stay checking in **tomorrow** (or today, if it
+wasn't sent yet), fully unattended. The timing is set under Settings → Welcome message
+timing (on check-in day, the day before, or 2 days before):
 
 **Calendar auto-sync** replaces manual .ics imports. Two feed types combine:
 - Each unit's **Airbnb iCal feed URL** (unit page → "Airbnb calendar feed URL";

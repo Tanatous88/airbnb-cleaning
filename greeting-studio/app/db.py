@@ -278,6 +278,9 @@ def init_db() -> None:
         # Copy & paste mode: the host pastes messages into Airbnb themselves,
         # so the automated Send / fill-only buttons are hidden by default.
         "manual_mode": "1",
+        # Welcome messages are drafted this many days before check-in
+        # (0 = on arrival day). The host sends them the day before.
+        "welcome_days_before": "1",
     }
     for k, v in defaults.items():
         conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, v))
