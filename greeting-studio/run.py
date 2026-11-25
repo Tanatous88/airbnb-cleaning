@@ -1,34 +1,30 @@
 #!/usr/bin/env python3
 """Start Guest Greeting & Review Studio:  python run.py
 
-Listens on the network (not just this machine) so it can be reached from
-other devices on your home Wi-Fi, e.g. http://<this-PC's-LAN-IP>:8321.
-There is no login on this app — anyone on the same network can open it,
-see guest names/phone digits, and click Send. Fine for a trusted home
-network; never expose this port to the internet (no router port-forwarding).
+Listens on this computer only (127.0.0.1) by default. The app has no login,
+holds a logged-in Airbnb host session and can send messages to guests, so it
+must not be open to every device on the home network.
+
+To use it from your phone or another computer, put it behind Tailscale Serve
+(reachable only by your own Tailscale devices, with HTTPS), e.g.:
+    tailscale serve --bg --https=8443 http://127.0.0.1:8321
+then open https://<this-pc>.<your-tailnet>.ts.net:8443/
+
+GREETING_STUDIO_HOST overrides the address it listens on (e.g. 0.0.0.0 for the
+whole LAN). Don't set it to the Tailscale IP: the watchdog checks the app at
+http://127.0.0.1:8321 and would keep restarting it.
+
+The auto-reloader is off, so after `git pull` restart the app with
+start_app.ps1 (Windows) for new code to take effect.
 """
-import socket
+import os
 
 import uvicorn
 
-
-def _lan_ip() -> str:
-    """Best-effort local network IP (doesn't actually send anything)."""
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(("8.8.8.8", 80))
-        return s.getsockname()[0]
-    except OSError:
-        return "<this-computer's-LAN-IP>"
-    finally:
-        s.close()
-
+HOST = os.environ.get("GREETING_STUDIO_HOST", "127.0.0.1").strip() or "127.0.0.1"
+PORT = 8321
 
 if __name__ == "__main__":
-    lan_ip = _lan_ip()
     print("Guest Greeting & Review Studio")
-    print(f"  On this computer:      http://127.0.0.1:8321")
-    print(f"  From other devices:    http://{lan_ip}:8321")
-    print("  (Windows Firewall may prompt to allow Python on first run — allow it")
-    print("   for Private networks only.)")
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8321, reload=True)
+    print(f"  Listening on: http://{HOST}:{PORT}")
+    uvicorn.run("app.main:app", host=HOST, port=PORT, reload=False)

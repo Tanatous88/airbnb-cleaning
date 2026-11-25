@@ -26,6 +26,12 @@ def smtp_configured() -> bool:
 
 
 TAILSCALE_NET = ipaddress.ip_network("100.64.0.0/10")
+LOCAL_ONLY_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+
+def listen_host() -> str:
+    """The address run.py listens on (see GREETING_STUDIO_HOST)."""
+    return os.environ.get("GREETING_STUDIO_HOST", "127.0.0.1").strip() or "127.0.0.1"
 
 
 def tailscale_ip() -> str:
@@ -45,13 +51,16 @@ def tailscale_ip() -> str:
 
 
 def app_url(conn=None) -> str:
-    """The dashboard link for the summary email. In order: the address set in
-    Settings, this PC's Tailscale address (works from anywhere on the
-    tailnet), else its home Wi-Fi address."""
+    """The dashboard link for the summary email. In order: the link set in
+    Settings (e.g. the Tailscale Serve https address); if the app only listens
+    on this PC (the default), the local address; otherwise this PC's
+    Tailscale address, else its home Wi-Fi address."""
     if conn is not None:
         custom = db.get_setting(conn, "dashboard_link", "").strip()
         if custom:
             return custom
+    if listen_host() in LOCAL_ONLY_HOSTS:
+        return f"http://127.0.0.1:{APP_PORT}"
     ts = tailscale_ip()
     if ts:
         return f"http://{ts}:{APP_PORT}"
@@ -126,7 +135,12 @@ def build_summary(conn, today: date = None, link: str = None):
     if needs:
         subject += f" ({needs} need{'s' if needs == 1 else ''} setup)"
     body = "\n".join(lines) if lines else "Nothing waiting today.\n"
-    where = "with Tailscale on" if "://100." in link else "from home Wi-Fi"
+    if ".ts.net" in link or "://100." in link:
+        where = "with Tailscale on"
+    elif "127.0.0.1" in link or "localhost" in link:
+        where = "on the AI PC; set a Tailscale link under Settings to open it from your phone"
+    else:
+        where = "from home"
     body += (f"\nOpen the dashboard ({where}): {link}\n"
              "Copy & open each message there, paste it into Airbnb, then click \"I sent it\".\n")
     return subject, body, len(welcome) + len(midstay) + len(due)

@@ -1050,7 +1050,7 @@ async function renderSettings() {
     <label><input type="checkbox" id="set-summary-on" ${s.summary_email_enabled ? "checked" : ""}> Send me the morning summary</label>
     <label>Send to</label>
     <input id="set-summary-to" type="email" value="${esc(s.summary_email_to || "")}" placeholder="you@example.com">
-    <label>Dashboard link in the email <span class="muted">(leave blank to use ${esc(s.dashboard_link_auto || "this PC's address")} — the Tailscale address when Tailscale is on)</span></label>
+    <label>Dashboard link in the email <span class="muted">(your Tailscale Serve address, e.g. https://ai-pc.&lt;tailnet&gt;.ts.net:8443/ — blank uses ${esc(s.dashboard_link_auto || "this PC's address")})</span></label>
     <input id="set-dashboard-link" value="${esc(s.dashboard_link || "")}" placeholder="${esc(s.dashboard_link_auto || "")}">
     <div class="row" style="margin-top:8px"><button class="secondary small" onclick="sendSummaryNow(this)">Send a test now</button>
       ${s.summary_email_last_sent ? `<span class="muted small">Last sent ${esc(s.summary_email_last_sent.replace("T", " ").slice(0, 16))} UTC</span>` : ""}</div>

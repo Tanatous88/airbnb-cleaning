@@ -135,7 +135,23 @@ def test_morning_read_runs_off_screen_by_default(conn, monkeypatch):
     assert seen["hidden"] is False
 
 
+def test_dashboard_link_local_only_by_default(conn, monkeypatch):
+    monkeypatch.delenv("GREETING_STUDIO_HOST", raising=False)
+    monkeypatch.setattr(notify.socket, "getaddrinfo",
+                        lambda *a, **k: [(2, 1, 6, "", ("100.101.102.103", 0))])
+    # the app only listens on 127.0.0.1, so a 100.x:8321 link would be dead
+    assert notify.app_url(conn) == "http://127.0.0.1:8321"
+    _, body, _ = notify.build_summary(conn, link=notify.app_url(conn))
+    assert "set a Tailscale link under Settings" in body
+    db.set_setting(conn, "dashboard_link", "https://ai-pc.example.ts.net:8443/")
+    conn.commit()
+    assert notify.app_url(conn) == "https://ai-pc.example.ts.net:8443/"
+    _, body, _ = notify.build_summary(conn, link=notify.app_url(conn))
+    assert "with Tailscale on" in body
+
+
 def test_dashboard_link_prefers_setting_then_tailscale(conn, monkeypatch):
+    monkeypatch.setenv("GREETING_STUDIO_HOST", "0.0.0.0")
     monkeypatch.setattr(notify.socket, "getaddrinfo",
                         lambda *a, **k: [(2, 1, 6, "", ("192.168.1.20", 0)),
                                          (2, 1, 6, "", ("100.101.102.103", 0))])
@@ -148,6 +164,7 @@ def test_dashboard_link_prefers_setting_then_tailscale(conn, monkeypatch):
 
 
 def test_no_tailscale_falls_back_to_wifi_address(monkeypatch):
+    monkeypatch.setenv("GREETING_STUDIO_HOST", "0.0.0.0")
     monkeypatch.setattr(notify.socket, "getaddrinfo", lambda *a, **k: [(2, 1, 6, "", ("192.168.1.20", 0))])
     assert notify.tailscale_ip() == ""
     assert notify.app_url().startswith("http://") and ":8321" in notify.app_url()

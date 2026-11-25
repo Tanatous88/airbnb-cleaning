@@ -12,3 +12,4 @@ app.log
 app_error.log
 debug_review_form.png
 .pytest_cache/
+run.py.bak-*

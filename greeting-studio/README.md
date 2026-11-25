@@ -137,7 +137,7 @@ then click **✓ I sent it** on the card. That logs it, clears "Greeting due", a
 reverses an accidental click. Reviews work the same way: **Copy & open in Airbnb** on a
 variant, click *Leave a review* on the reservation and paste, then **✓ Posted** (on the
 dashboard's Reviews due list) or **Mark review posted** (on the stay page). Copying also
-works when the app is opened from a phone at `http://<PC's IP>:8321`.
+works when the app is opened from a phone (see *Using the app from your phone*).
 
 With copy & paste mode off, the cards also show **Auto-send**, described below.
 
@@ -170,7 +170,7 @@ used to keep port 8321 locked) and restarted. Output goes to `app.log` / `app_er
 
 | Script | Does |
 |---|---|
-| `start_app.ps1` | Restart the app now (re-enables the task) |
+| `start_app.ps1` | Restart the app now (re-enables the task). **Run it after every `git pull`** — the auto-reloader is off, so new code only loads on a restart |
 | `stop_app.ps1` | Stop the app and pause auto-start until `start_app.ps1` |
 | `uninstall_autostart.ps1` | Remove the task completely |
 
@@ -183,20 +183,24 @@ add `SMTP_USER` and `SMTP_PASSWORD` to `.env` (for Gmail, an *app password* from
 Account → Security → 2-Step Verification → App passwords), restart the app, then use
 **Send a test now**.
 
-## Using the app from your phone, anywhere (Tailscale)
+## Using the app from your phone, anywhere (Tailscale Serve)
 
-With Tailscale on the AI PC and your phone, open `http://<AI PC's Tailscale IP>:8321`
-on the phone (`tailscale ip -4` on the PC shows the IP). If it loads on the PC but not
-the phone, Windows Firewall is blocking it; allow the port for Tailscale devices only,
-from an Administrator PowerShell:
+The app has no login, holds a logged-in Airbnb session and can message guests, so it
+listens on the PC only (`127.0.0.1:8321`) and is **not** reachable from the home
+network. For your phone or Mac, publish it to your own Tailscale devices with HTTPS:
 
 ```powershell
-New-NetFirewallRule -DisplayName "Greeting Studio (Tailscale only)" -Direction Inbound -Protocol TCP -LocalPort 8321 -RemoteAddress 100.64.0.0/10 -Action Allow
+tailscale serve --bg --https=8443 http://127.0.0.1:8321
 ```
 
-The app has no login, so don't open the port any wider than that. The morning summary
-email links to the Tailscale address automatically when Tailscale is running (or set
-your own under Settings → Morning summary email).
+Then open `https://<pc-name>.<your-tailnet>.ts.net:8443/` on any device signed in to
+your Tailscale account (`tailscale serve status` shows the exact address). Funnel must
+stay off, so it's never on the public internet. To undo: `tailscale serve --https=8443 off`.
+
+Put that address in Settings → Morning summary email → *Dashboard link* so the email
+links to it. Don't open port 8321 in the firewall or set `GREETING_STUDIO_HOST`, and
+never set it to the Tailscale IP: the watchdog checks `http://127.0.0.1:8321` and would
+keep restarting the app.
 
 ## Weekend guide link
 
