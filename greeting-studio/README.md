@@ -202,6 +202,17 @@ links to it. Don't open port 8321 in the firewall or set `GREETING_STUDIO_HOST`,
 never set it to the Tailscale IP: the watchdog checks `http://127.0.0.1:8321` and would
 keep restarting the app.
 
+## Morning alert in Home Assistant
+
+Settings → **Home Assistant**: enter your Home Assistant address as the AI PC reaches it
+(e.g. `http://homeassistant.local:8123`). After the 7 AM run, on days with something to do,
+the app POSTs the alert to a webhook on Home Assistant — outbound only, so nothing new can
+reach the app. Open *Set up the automation in Home Assistant* on that card, copy the YAML
+into a new automation (Edit in YAML), change `mobile_app_YOUR_PHONE` to your phone's
+notify action, save, and click **Send a test to Home Assistant**. The notification opens
+the Dashboard link when tapped. The webhook id is random per install and acts as the
+password for the alert; the automation only accepts it from your local network.
+
 ## Weekend guide link
 
 Welcome messages for stays over a Friday, Saturday or Sunday night link to the Palouse

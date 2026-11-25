@@ -1230,14 +1230,17 @@ def merge_duplicates():
 
 
 @app.post("/api/summary/send-now")
-def summary_send_now():
-    """Settings → "Send a test now": today's summary, even if empty."""
+def summary_send_now(to: str = "email"):
+    """Settings test buttons: today's summary, even if empty, to one channel."""
+    if to not in ("email", "ha"):
+        raise HTTPException(status_code=400, detail="to must be 'email' or 'ha'")
     try:
-        return notify.send_morning_summary(force=True)
+        return notify.send_morning_summary(force=True, only=to)
     except notify.NotConfigured as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Couldn't send the email: {e}")
+        what = "the email" if to == "email" else "to Home Assistant"
+        raise HTTPException(status_code=502, detail=f"Couldn't send {what}: {e}")
 
 
 @app.post("/api/airbnb/login-window")
@@ -1278,6 +1281,7 @@ class SettingsIn(BaseModel):
     summary_email_enabled: Optional[bool] = None
     summary_email_to: Optional[str] = None
     dashboard_link: Optional[str] = None
+    ha_url: Optional[str] = None
 
 
 @app.get("/api/settings")
@@ -1308,6 +1312,10 @@ def get_settings():
             "summary_email_to": db.get_setting(conn, "summary_email_to", ""),
             "dashboard_link": db.get_setting(conn, "dashboard_link", ""),
             "dashboard_link_auto": notify.app_url(),
+            "ha_url": db.get_setting(conn, "ha_url", ""),
+            "ha_webhook_id": db.get_setting(conn, "ha_webhook_id", ""),
+            "ha_last_sent": db.get_setting(conn, "ha_last_sent", ""),
+            "ha_last_error": db.get_setting(conn, "ha_last_error", ""),
             "smtp_configured": notify.smtp_configured(),
             "summary_email_last_sent": db.get_setting(conn, "summary_email_last_sent", ""),
             "summary_email_last_error": db.get_setting(conn, "summary_email_last_error", ""),
@@ -1335,6 +1343,15 @@ def update_settings(body: SettingsIn):
             if url and not url.startswith(("https://", "http://")):
                 raise HTTPException(status_code=400, detail="The weekend guide link must start with https://")
             db.set_setting(conn, "weekend_guide_url", url or queue_mod.WEEKEND_GUIDE_URL)
+        if body.ha_url is not None:
+            ha = body.ha_url.strip().rstrip("/")
+            if ha and not ha.startswith(("http://", "https://")):
+                raise HTTPException(status_code=400,
+                                    detail="The Home Assistant address must start with http:// or https://")
+            if "/api/" in ha:
+                raise HTTPException(status_code=400, detail="Enter just the Home Assistant address, "
+                                    "e.g. http://homeassistant.local:8123 — the app adds the webhook part")
+            db.set_setting(conn, "ha_url", ha)
         if body.dashboard_link is not None:
             link = body.dashboard_link.strip()
             if link and not link.startswith(("http://", "https://")):

@@ -947,7 +947,9 @@ async function renderHealth() {
       : `<p>${ok(true, "No sync errors")}</p>`}
     <p class="muted small">Morning queue last ran ${fmtTime(h.queue.last_run)} · reviews last auto-drafted ${fmtTime(h.reviews.last_auto_run)}${
       h.summary_email && h.summary_email.enabled ? ` · summary email last sent ${fmtTime(h.summary_email.last_sent)}` : ""}</p>
-    ${h.summary_email && h.summary_email.last_error ? `<p class="health-bad">Summary email failed: ${esc(h.summary_email.last_error)}</p>` : ""}</div>`;
+    ${h.summary_email && h.summary_email.last_error ? `<p class="health-bad">Summary email failed: ${esc(h.summary_email.last_error)}</p>` : ""}
+    ${h.home_assistant && h.home_assistant.enabled ? `<p class="muted small">Home Assistant alert last sent ${fmtTime(h.home_assistant.last_sent)}</p>` : ""}
+    ${h.home_assistant && h.home_assistant.last_error ? `<p class="health-bad">Home Assistant alert failed: ${esc(h.home_assistant.last_error)}</p>` : ""}</div>`;
 
   html += `<div class="card"><h3>Units</h3><table><thead><tr><th>Unit</th><th>Airbnb calendar feed</th><th>Template</th><th>Door codes from Airbnb</th></tr></thead><tbody>`;
   for (const u of h.units) {
@@ -1057,6 +1059,28 @@ async function renderSettings() {
     ${s.summary_email_last_error ? `<p class="small" style="color:var(--red)">Last attempt failed: ${esc(s.summary_email_last_error)}</p>` : ""}
   </div>
   <div class="card">
+    <h3>Home Assistant</h3>
+    <p class="muted small">Sends the morning alert ("2 welcome messages, 1 review due") to your Home Assistant,
+      which pushes it to your phone. Tapping it opens the dashboard (the Dashboard link above). Only on days with something to do.</p>
+    <label>Home Assistant address <span class="muted">(as the AI PC reaches it, e.g. http://homeassistant.local:8123)</span></label>
+    <input id="set-ha-url" value="${esc(s.ha_url || "")}" placeholder="http://homeassistant.local:8123">
+    <details style="margin-top:8px"><summary class="small"><b>Set up the automation in Home Assistant</b> (once)</summary>
+      <ol class="small">
+        <li>In Home Assistant: <b>Settings → Automations &amp; scenes → Create automation → Create new automation</b>,
+          then the ⋮ menu → <b>Edit in YAML</b>.</li>
+        <li>Replace everything with the text below (<b>Copy</b> button), and change <code>mobile_app_YOUR_PHONE</code>
+          to your phone — start typing <code>notify.mobile_app</code> in a new action to see its exact name.</li>
+        <li>Save. Back here, click <b>Send a test to Home Assistant</b>.</li>
+      </ol>
+      <pre class="mono small" id="ha-yaml" style="white-space:pre-wrap">${esc(haAutomationYaml(s.ha_webhook_id))}</pre>
+      <button class="ghost small" onclick="copyText($('#ha-yaml').textContent)">Copy</button>
+      <p class="muted small">The webhook id in it works like a password for this alert — keep it to your Home Assistant.</p>
+    </details>
+    <div class="row" style="margin-top:8px"><button class="secondary small" onclick="sendHaTest(this)">Send a test to Home Assistant</button>
+      ${s.ha_last_sent ? `<span class="muted small">Last sent ${esc(s.ha_last_sent.replace("T", " ").slice(0, 16))} UTC</span>` : ""}</div>
+    ${s.ha_last_error ? `<p class="small" style="color:var(--red)">Last attempt failed: ${esc(s.ha_last_error)}</p>` : ""}
+  </div>
+  <div class="card">
     <h3>Weekend guide link</h3>
     <p class="muted small">Added to welcome messages for stays over a Friday, Saturday or Sunday night. Open it in a browser to check it works before saving.</p>
     <input id="set-guide-url" value="${esc(s.weekend_guide_url || "")}">
@@ -1123,6 +1147,7 @@ async function saveSettings(btn) {
       summary_email_enabled: $("#set-summary-on").checked,
       summary_email_to: $("#set-summary-to").value.trim(),
       dashboard_link: $("#set-dashboard-link").value.trim(),
+      ha_url: $("#set-ha-url").value.trim(),
       weekend_guide_url: $("#set-guide-url").value.trim(),
       hide_browser: $("#set-hide-browser").checked,
       midstay_enabled: $("#set-midstay").checked,
@@ -1139,8 +1164,38 @@ async function sendSummaryNow(btn) {
   busy(btn, true);
   try {
     await saveSettingsQuietly();
-    const r = await api("/api/summary/send-now", { method: "POST" });
+    const r = await api("/api/summary/send-now?to=email", { method: "POST" });
     toast(`Sent ✓ "${r.subject}"`);
+  } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
+}
+
+function haAutomationYaml(webhookId) {
+  return `alias: Greeting Studio morning alert
+description: Welcome messages / reviews waiting in Greeting Studio
+triggers:
+  - trigger: webhook
+    webhook_id: ${webhookId}
+    allowed_methods:
+      - POST
+    local_only: true
+actions:
+  - action: notify.mobile_app_YOUR_PHONE
+    data:
+      title: "{{ trigger.json.title }}"
+      message: "{{ trigger.json.message }}"
+      data:
+        url: "{{ trigger.json.link }}"
+        clickAction: "{{ trigger.json.link }}"
+mode: single`;
+}
+
+async function sendHaTest(btn) {
+  busy(btn, true);
+  try {
+    await api("/api/settings", { method: "PUT", body: {
+      ha_url: $("#set-ha-url").value.trim(), dashboard_link: $("#set-dashboard-link").value.trim() } });
+    const r = await api("/api/summary/send-now?to=ha", { method: "POST" });
+    toast(`Sent to Home Assistant ✓ "${r.subject.replace("Greeting Studio: ", "")}" — check your phone`);
   } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
 }
 

@@ -6,9 +6,11 @@ address is a setting in the local database. Nothing here sends anything to a
 guest — it's a note to the host, with links back to the app.
 """
 import ipaddress
+import json
 import os
 import smtplib
 import socket
+import urllib.request
 from datetime import date, timedelta
 from email.message import EmailMessage
 
@@ -167,25 +169,77 @@ def send_email(subject: str, body: str, to: str) -> None:
         s.send_message(msg)
 
 
-def send_morning_summary(force: bool = False) -> dict:
-    """Called after the morning job. Skips quietly when switched off or when
-    there's nothing to do (unless force, e.g. the Settings test button)."""
+def ha_webhook_url(conn) -> str:
+    base = db.get_setting(conn, "ha_url", "").strip().rstrip("/")
+    hook = db.get_setting(conn, "ha_webhook_id", "").strip()
+    return f"{base}/api/webhook/{hook}" if base and hook else ""
+
+
+def send_home_assistant(conn, subject: str, body: str, count: int, link: str) -> None:
+    """POST the alert to the host's Home Assistant webhook. Outbound only:
+    nothing new can reach the app. The automation in Home Assistant decides
+    how it shows up (usually a phone notification)."""
+    url = ha_webhook_url(conn)
+    if not url:
+        raise NotConfigured("Home Assistant isn't set up: enter its address under "
+                            "Settings → Home Assistant.")
+    payload = {
+        "title": "Greeting Studio",
+        "message": subject.replace("Greeting Studio: ", "", 1),
+        "count": count,
+        "link": link,
+        "details": body,
+    }
+    req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), method="POST",
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        if resp.status >= 300:
+            raise RuntimeError(f"Home Assistant answered {resp.status}")
+
+
+def _record(conn, prefix: str, error: str = "") -> None:
+    if error:
+        db.set_setting(conn, f"{prefix}_last_error", f"{db.now()} {error}")
+    else:
+        db.set_setting(conn, f"{prefix}_last_sent", db.now())
+        db.set_setting(conn, f"{prefix}_last_error", "")
+    conn.commit()
+
+
+def send_morning_summary(force: bool = False, only: str = "") -> dict:
+    """Called after the morning job: emails the summary and/or sends it to
+    Home Assistant, whichever is set up. Skips quietly when neither is on or
+    there's nothing to do. force (the Settings test buttons) sends even an
+    empty summary, to the channel named in `only` ('email' or 'ha')."""
     conn = db.connect()
     try:
-        if not force and db.get_setting(conn, "summary_email_enabled", "0") != "1":
+        email_on = only == "email" or (not only and
+                                       db.get_setting(conn, "summary_email_enabled", "0") == "1")
+        ha_on = only == "ha" or (not only and bool(ha_webhook_url(conn)))
+        if not (email_on or ha_on):
             return {"sent": False, "reason": "off"}
         subject, body, count = build_summary(conn)
         if count == 0 and not force:
             return {"sent": False, "reason": "nothing to do"}
-        try:
-            send_email(subject, body, db.get_setting(conn, "summary_email_to", ""))
-        except Exception as e:
-            db.set_setting(conn, "summary_email_last_error", f"{db.now()} {e}")
-            conn.commit()
-            raise
-        db.set_setting(conn, "summary_email_last_sent", db.now())
-        db.set_setting(conn, "summary_email_last_error", "")
-        conn.commit()
-        return {"sent": True, "subject": subject}
+        sent, errors = [], []
+        if email_on:
+            try:
+                send_email(subject, body, db.get_setting(conn, "summary_email_to", ""))
+                _record(conn, "summary_email")
+                sent.append("email")
+            except Exception as e:
+                _record(conn, "summary_email", str(e))
+                errors.append(e)
+        if ha_on:
+            try:
+                send_home_assistant(conn, subject, body, count, app_url(conn))
+                _record(conn, "ha")
+                sent.append("ha")
+            except Exception as e:
+                _record(conn, "ha", str(e))
+                errors.append(e)
+        if errors and not sent:
+            raise errors[0]
+        return {"sent": bool(sent), "channels": sent, "subject": subject}
     finally:
         conn.close()

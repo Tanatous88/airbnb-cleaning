@@ -291,9 +291,17 @@ def init_db() -> None:
         "summary_email_to": "",
         # Optional override for the dashboard link in the summary email.
         "dashboard_link": "",
+        # Home Assistant: the app POSTs the morning alert to a webhook on the
+        # host's own Home Assistant, which pushes it to their phone.
+        "ha_url": "",
     }
     for k, v in defaults.items():
         conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, v))
+    # The webhook id acts as the password for Home Assistant's webhook, so
+    # each install gets its own random one (never a fixed value in the code).
+    import secrets
+    conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
+                 ("ha_webhook_id", "greeting-studio-" + secrets.token_urlsafe(16)))
     conn.commit()
     conn.close()
 
